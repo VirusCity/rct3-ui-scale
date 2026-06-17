@@ -2,6 +2,8 @@
 
 #include <windows.h>
 
+#include <intrin.h>  // _ReturnAddress
+
 #include <string>
 
 #include "MinHook.h"
@@ -157,7 +159,8 @@ HRESULT WINAPI Hook_Present(IDirect3DDevice9* dev, const RECT* src,
 
 HRESULT WINAPI Hook_DrawPrimitive(IDirect3DDevice9* dev, D3DPRIMITIVETYPE type,
                                   UINT startVertex, UINT primCount) {
-  frameinspect::OnDraw(dev, "DrawPrimitive", type, primCount);
+  void* caller = _ReturnAddress();
+  frameinspect::OnDraw(dev, "DrawPrimitive", type, primCount, caller);
   return o_DrawPrimitive(dev, type, startVertex, primCount);
 }
 
@@ -165,7 +168,8 @@ HRESULT WINAPI Hook_DrawIndexedPrimitive(IDirect3DDevice9* dev,
                                          D3DPRIMITIVETYPE type, INT baseVertex,
                                          UINT minIndex, UINT numVertices,
                                          UINT startIndex, UINT primCount) {
-  frameinspect::OnDraw(dev, "DrawIndexedPrimitive", type, primCount);
+  void* caller = _ReturnAddress();
+  frameinspect::OnDraw(dev, "DrawIndexedPrimitive", type, primCount, caller);
   return o_DrawIndexedPrimitive(dev, type, baseVertex, minIndex, numVertices,
                                 startIndex, primCount);
 }
@@ -173,7 +177,8 @@ HRESULT WINAPI Hook_DrawIndexedPrimitive(IDirect3DDevice9* dev,
 HRESULT WINAPI Hook_DrawPrimitiveUP(IDirect3DDevice9* dev,
                                     D3DPRIMITIVETYPE type, UINT primCount,
                                     const void* data, UINT stride) {
-  frameinspect::OnDraw(dev, "DrawPrimitiveUP", type, primCount);
+  void* caller = _ReturnAddress();
+  frameinspect::OnDraw(dev, "DrawPrimitiveUP", type, primCount, caller);
   return o_DrawPrimitiveUP(dev, type, primCount, data, stride);
 }
 
@@ -181,7 +186,8 @@ HRESULT WINAPI Hook_DrawIndexedPrimitiveUP(
     IDirect3DDevice9* dev, D3DPRIMITIVETYPE type, UINT minIndex,
     UINT numVertices, UINT primCount, const void* indexData,
     D3DFORMAT indexFormat, const void* vertexData, UINT stride) {
-  frameinspect::OnDraw(dev, "DrawIndexedPrimitiveUP", type, primCount);
+  void* caller = _ReturnAddress();
+  frameinspect::OnDraw(dev, "DrawIndexedPrimitiveUP", type, primCount, caller);
   return o_DrawIndexedPrimitiveUP(dev, type, minIndex, numVertices, primCount,
                                   indexData, indexFormat, vertexData, stride);
 }

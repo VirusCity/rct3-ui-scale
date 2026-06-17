@@ -19,8 +19,10 @@ namespace frameinspect {
 void OnFrameBoundary(IDirect3DDevice9* device);
 
 // Called from each Draw* detour. When a capture is active, logs the draw call
-// and the device state at that point. `call` is the API name for the log.
+// and the device state at that point. `call` is the API name for the log;
+// `caller` is the game's return address (from _ReturnAddress() in the detour),
+// used to report the UI draw call-sites as module+RVA for static analysis.
 void OnDraw(IDirect3DDevice9* device, const char* call, D3DPRIMITIVETYPE type,
-            UINT primitiveCount);
+            UINT primitiveCount, void* caller);
 
 }  // namespace frameinspect

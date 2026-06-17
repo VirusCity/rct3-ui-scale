@@ -17,6 +17,18 @@ int g_uiBoundaryDraw = -1;   // first UI-like draw (fixed-function + XYZRHW)
 int g_uiLastDraw = -1;       // last UI-like draw
 unsigned g_uiDrawCount = 0;  // count of UI-like draws this frame
 
+// Distinct game return addresses that issued UI draws — these are the call
+// sites to open in Ghidra/x64dbg. Small fixed set; UI usually has 1–3.
+void* g_uiCallers[8] = {nullptr};
+unsigned g_uiCallerCount = 0;
+
+void RecordUICaller(void* caller) {
+  for (unsigned i = 0; i < g_uiCallerCount; ++i)
+    if (g_uiCallers[i] == caller) return;  // already seen
+  if (g_uiCallerCount < _countof(g_uiCallers))
+    g_uiCallers[g_uiCallerCount++] = caller;
+}
+
 // Cached discriminating state, to flag the world->UI transition.
 struct KeyState {
   DWORD zenable = 0xFFFFFFFF;
@@ -67,6 +79,7 @@ void StartCapture(IDirect3DDevice9* dev) {
   g_uiBoundaryDraw = -1;
   g_uiLastDraw = -1;
   g_uiDrawCount = 0;
+  g_uiCallerCount = 0;
   g_prev = KeyState{};
 
   D3DVIEWPORT9 vp{};
@@ -82,6 +95,25 @@ void FinishCapture() {
   LOG("=== FRAME CAPTURE END: %u draws; UI-like (VS=0 & XYZRHW) = %u draws, "
       "range [%d..%d] ===",
       g_drawIndex, g_uiDrawCount, g_uiBoundaryDraw, g_uiLastDraw);
+
+  // Resolve each UI draw call-site to module+RVA — the entry points for static
+  // analysis of the UI rendering / coordinate code.
+  for (unsigned i = 0; i < g_uiCallerCount; ++i) {
+    void* caller = g_uiCallers[i];
+    MEMORY_BASIC_INFORMATION mbi{};
+    if (VirtualQuery(caller, &mbi, sizeof(mbi)) && mbi.AllocationBase) {
+      char name[MAX_PATH] = {0};
+      GetModuleFileNameA(reinterpret_cast<HMODULE>(mbi.AllocationBase), name,
+                         MAX_PATH);
+      const char* slash = strrchr(name, '\\');
+      uintptr_t base = reinterpret_cast<uintptr_t>(mbi.AllocationBase);
+      uintptr_t rva = reinterpret_cast<uintptr_t>(caller) - base;
+      LOG("  UI draw call-site: %s+0x%IX  (abs %p, module base %p)",
+          slash ? slash + 1 : name, rva, caller, (void*)base);
+    } else {
+      LOG("  UI draw call-site: %p (module unknown)", caller);
+    }
+  }
   g_capturing = false;
 }
 
@@ -113,7 +145,7 @@ void OnFrameBoundary(IDirect3DDevice9* device) {
 }
 
 void OnDraw(IDirect3DDevice9* dev, const char* call, D3DPRIMITIVETYPE type,
-            UINT primitiveCount) {
+            UINT primitiveCount, void* caller) {
   if (!g_capturing || !dev) return;
 
   DWORD zenable = 0, zwrite = 0, alpha = 0, cull = 0, lighting = 0;
@@ -141,6 +173,7 @@ void OnDraw(IDirect3DDevice9* dev, const char* call, D3DPRIMITIVETYPE type,
   if (looksUI) {
     ++g_uiDrawCount;
     g_uiLastDraw = static_cast<int>(g_drawIndex);
+    RecordUICaller(caller);
   }
 
   if (g_prev.valid &&
