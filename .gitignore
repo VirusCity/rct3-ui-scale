@@ -1,3 +1,6 @@
+# NOTE: .gitignore does NOT support inline (trailing) comments — a '#' after a
+# pattern becomes part of the pattern. Keep every comment on its own line.
+
 # Build output
 /build/
 *.pdb
@@ -18,20 +21,27 @@ CMakeUserPresets.json
 Thumbs.db
 Desktop.ini
 
+# Local reverse-engineering workspace (never commit)
+# Ghidra install (huge), and work dirs holding the exe copy, project, and output
+/ghidra_12.1.2_PUBLIC/
+/ghidra_work/
+/ghidra_rct3/
+
 # --- Never commit game-derived material (CLAUDE.md hard rule) ---
-# Game assets, executables, extracted sprites, and any disassembly dumps.
+# Game assets, executables, extracted sprites, Ghidra projects, disassembly dumps
 *.ovl
 *.exe
 *.dll
 *.idb
 *.i64
-*.gpr            # Ghidra project
+*.gpr
 *.rep
 *.bytemap
 research/_private/
 # Ghidra notes hold addresses derived from the copyrighted exe — keep local
 research/ghidra_notes.md
+# RenderDoc captures and extracted sprites (large / copyrighted frame data)
 research/**/*.png
 research/**/*.bmp
 research/**/*.dds
-research/**/*.rdc  # RenderDoc captures (large, copyrighted frame data)
+research/**/*.rdc
