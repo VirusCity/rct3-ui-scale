@@ -26,6 +26,13 @@ struct Config {
   // Virtual-key code for the frame-capture hotkey. Default 0x7A = VK_F11
   // (F12 is avoided — it's the Steam screenshot key).
   unsigned captureKey = 0x7A;
+
+  // --- Render-side scaling proof -------------------------------------------
+  // When on, UI draws (fixed-function XYZRHW) have their vertex x/y scaled about
+  // screen center by `scale`, in place, just before the draw. This is the
+  // visual proof-of-concept; it does NOT yet remap mouse input (clicks still
+  // land at original positions). Turn off to return to the transparent proxy.
+  bool renderSideScale = true;
 };
 
 // Parse `iniPath` into the process-wide config. Call once at DLL attach.

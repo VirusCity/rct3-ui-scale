@@ -39,6 +39,10 @@ void LoadConfig(const std::string& iniPath) {
   std::string keyStr = ReadString("Diagnostics", "CaptureKey", "0x7A", iniPath);
   unsigned long vk = strtoul(keyStr.c_str(), nullptr, 0);
   if (vk > 0 && vk <= 0xFF) g_config.captureKey = static_cast<unsigned>(vk);
+
+  // [Scaling] Enabled=1   (render-side proof toggle)
+  g_config.renderSideScale =
+      GetPrivateProfileIntA("Scaling", "Enabled", 1, iniPath.c_str()) != 0;
 }
 
 const Config& GetConfig() { return g_config; }

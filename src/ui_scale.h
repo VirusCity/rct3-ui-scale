@@ -27,4 +27,11 @@ void OnEndScene(IDirect3DDevice9* device);
 void OnPreReset(IDirect3DDevice9* device);
 void OnPostReset(IDirect3DDevice9* device, D3DPRESENT_PARAMETERS* pp);
 
+// Render-side proof: called from the VB-based draw detours BEFORE the real draw.
+// If this looks like a UI draw (fixed-function + XYZRHW) and the bound vertex
+// buffer is readable, scales the used vertices' x/y about screen center by the
+// configured factor, in place. No-op for world draws or unreadable buffers.
+// `firstVertex`/`vertexCount` describe the vertices the draw will consume.
+void ScaleDrawIfUI(IDirect3DDevice9* device, UINT firstVertex, UINT vertexCount);
+
 }  // namespace uiscale

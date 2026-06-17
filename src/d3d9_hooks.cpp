@@ -152,15 +152,29 @@ HRESULT WINAPI Hook_Present(IDirect3DDevice9* dev, const RECT* src,
   return o_Present(dev, src, dst, wnd, dirty);
 }
 
+// Number of vertices consumed by a non-indexed draw of `primCount` primitives.
+UINT VertsForPrim(D3DPRIMITIVETYPE type, UINT primCount) {
+  switch (type) {
+    case D3DPT_POINTLIST:     return primCount;
+    case D3DPT_LINELIST:      return primCount * 2;
+    case D3DPT_LINESTRIP:     return primCount + 1;
+    case D3DPT_TRIANGLELIST:  return primCount * 3;
+    case D3DPT_TRIANGLESTRIP: return primCount + 2;
+    case D3DPT_TRIANGLEFAN:   return primCount + 2;
+    default:                  return 0;
+  }
+}
+
 // ---- Draw-call detours -----------------------------------------------------
-// Transparent: forward to the inspector (active only during a capture) then to
-// the real method. This is also where the UI scale transform will hook in once
-// the capture identifies the UI pass.
+// Forward to the inspector (active only during a capture), apply the render-side
+// UI scale (no-op for world draws / unreadable buffers), then call the real
+// method so it draws the (possibly scaled) vertices.
 
 HRESULT WINAPI Hook_DrawPrimitive(IDirect3DDevice9* dev, D3DPRIMITIVETYPE type,
                                   UINT startVertex, UINT primCount) {
   void* caller = _ReturnAddress();
   frameinspect::OnDraw(dev, "DrawPrimitive", type, primCount, caller);
+  uiscale::ScaleDrawIfUI(dev, startVertex, VertsForPrim(type, primCount));
   return o_DrawPrimitive(dev, type, startVertex, primCount);
 }
 
@@ -170,6 +184,11 @@ HRESULT WINAPI Hook_DrawIndexedPrimitive(IDirect3DDevice9* dev,
                                          UINT startIndex, UINT primCount) {
   void* caller = _ReturnAddress();
   frameinspect::OnDraw(dev, "DrawIndexedPrimitive", type, primCount, caller);
+  // Vertices consumed: [baseVertex + minIndex, + numVertices).
+  const INT first = baseVertex + static_cast<INT>(minIndex);
+  if (first >= 0) {
+    uiscale::ScaleDrawIfUI(dev, static_cast<UINT>(first), numVertices);
+  }
   return o_DrawIndexedPrimitive(dev, type, baseVertex, minIndex, numVertices,
                                 startIndex, primCount);
 }
