@@ -29,7 +29,8 @@ Desktop.ini
 *.rep
 *.bytemap
 research/_private/
-research/ghidra_notes.md   # addresses derived from the copyrighted exe — keep local
+# Ghidra notes hold addresses derived from the copyrighted exe — keep local
+research/ghidra_notes.md
 research/**/*.png
 research/**/*.bmp
 research/**/*.dds
