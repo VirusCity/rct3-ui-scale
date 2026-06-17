@@ -5,6 +5,7 @@
 #include <string>
 
 #include "MinHook.h"
+#include "frame_inspect.h"
 #include "logging.h"
 #include "ui_scale.h"
 
@@ -90,14 +91,16 @@ namespace {
 constexpr int kIDirect3D9_CreateDevice = 16;
 
 // IDirect3DDevice9 vtable
-constexpr int kDev_Reset    = 16;
-constexpr int kDev_Present  = 17;
-constexpr int kDev_EndScene = 42;
-// Reserved for the scaling stage (gated on RenderDoc findings):
-// constexpr int kDev_SetTransform          = 44;
-// constexpr int kDev_SetViewport           = 47;
-// constexpr int kDev_DrawPrimitive         = 81;
-// constexpr int kDev_DrawIndexedPrimitive  = 82;
+constexpr int kDev_Reset                 = 16;
+constexpr int kDev_Present               = 17;
+constexpr int kDev_EndScene              = 42;
+constexpr int kDev_DrawPrimitive         = 81;
+constexpr int kDev_DrawIndexedPrimitive  = 82;
+constexpr int kDev_DrawPrimitiveUP       = 83;
+constexpr int kDev_DrawIndexedPrimitiveUP = 84;
+// Reserved for the scaling stage (gated on the frame-inspector findings):
+// constexpr int kDev_SetTransform = 44;
+// constexpr int kDev_SetViewport  = 47;
 
 using PFN_CreateDevice = HRESULT(WINAPI*)(IDirect3D9*, UINT, D3DDEVTYPE, HWND,
                                           DWORD, D3DPRESENT_PARAMETERS*,
@@ -106,11 +109,25 @@ using PFN_Present = HRESULT(WINAPI*)(IDirect3DDevice9*, const RECT*, const RECT*
                                      HWND, const RGNDATA*);
 using PFN_EndScene = HRESULT(WINAPI*)(IDirect3DDevice9*);
 using PFN_Reset = HRESULT(WINAPI*)(IDirect3DDevice9*, D3DPRESENT_PARAMETERS*);
+using PFN_DrawPrimitive =
+    HRESULT(WINAPI*)(IDirect3DDevice9*, D3DPRIMITIVETYPE, UINT, UINT);
+using PFN_DrawIndexedPrimitive = HRESULT(WINAPI*)(
+    IDirect3DDevice9*, D3DPRIMITIVETYPE, INT, UINT, UINT, UINT, UINT);
+using PFN_DrawPrimitiveUP = HRESULT(WINAPI*)(IDirect3DDevice9*,
+                                             D3DPRIMITIVETYPE, UINT,
+                                             const void*, UINT);
+using PFN_DrawIndexedPrimitiveUP =
+    HRESULT(WINAPI*)(IDirect3DDevice9*, D3DPRIMITIVETYPE, UINT, UINT, UINT,
+                     const void*, D3DFORMAT, const void*, UINT);
 
 PFN_CreateDevice o_CreateDevice = nullptr;
 PFN_Present      o_Present = nullptr;
 PFN_EndScene     o_EndScene = nullptr;
 PFN_Reset        o_Reset = nullptr;
+PFN_DrawPrimitive             o_DrawPrimitive = nullptr;
+PFN_DrawIndexedPrimitive      o_DrawIndexedPrimitive = nullptr;
+PFN_DrawPrimitiveUP           o_DrawPrimitiveUP = nullptr;
+PFN_DrawIndexedPrimitiveUP    o_DrawIndexedPrimitiveUP = nullptr;
 
 bool g_d3d9Hooked = false;
 bool g_deviceHooked = false;
@@ -128,8 +145,45 @@ void* VtblEntry(void* comObject, int index) {
 
 HRESULT WINAPI Hook_Present(IDirect3DDevice9* dev, const RECT* src,
                             const RECT* dst, HWND wnd, const RGNDATA* dirty) {
+  frameinspect::OnFrameBoundary(dev);
   uiscale::OnPresent(dev);
   return o_Present(dev, src, dst, wnd, dirty);
+}
+
+// ---- Draw-call detours -----------------------------------------------------
+// Transparent: forward to the inspector (active only during a capture) then to
+// the real method. This is also where the UI scale transform will hook in once
+// the capture identifies the UI pass.
+
+HRESULT WINAPI Hook_DrawPrimitive(IDirect3DDevice9* dev, D3DPRIMITIVETYPE type,
+                                  UINT startVertex, UINT primCount) {
+  frameinspect::OnDraw(dev, "DrawPrimitive", type, primCount);
+  return o_DrawPrimitive(dev, type, startVertex, primCount);
+}
+
+HRESULT WINAPI Hook_DrawIndexedPrimitive(IDirect3DDevice9* dev,
+                                         D3DPRIMITIVETYPE type, INT baseVertex,
+                                         UINT minIndex, UINT numVertices,
+                                         UINT startIndex, UINT primCount) {
+  frameinspect::OnDraw(dev, "DrawIndexedPrimitive", type, primCount);
+  return o_DrawIndexedPrimitive(dev, type, baseVertex, minIndex, numVertices,
+                                startIndex, primCount);
+}
+
+HRESULT WINAPI Hook_DrawPrimitiveUP(IDirect3DDevice9* dev,
+                                    D3DPRIMITIVETYPE type, UINT primCount,
+                                    const void* data, UINT stride) {
+  frameinspect::OnDraw(dev, "DrawPrimitiveUP", type, primCount);
+  return o_DrawPrimitiveUP(dev, type, primCount, data, stride);
+}
+
+HRESULT WINAPI Hook_DrawIndexedPrimitiveUP(
+    IDirect3DDevice9* dev, D3DPRIMITIVETYPE type, UINT minIndex,
+    UINT numVertices, UINT primCount, const void* indexData,
+    D3DFORMAT indexFormat, const void* vertexData, UINT stride) {
+  frameinspect::OnDraw(dev, "DrawIndexedPrimitiveUP", type, primCount);
+  return o_DrawIndexedPrimitiveUP(dev, type, minIndex, numVertices, primCount,
+                                  indexData, indexFormat, vertexData, stride);
 }
 
 HRESULT WINAPI Hook_EndScene(IDirect3DDevice9* dev) {
@@ -190,6 +244,15 @@ void InstallOnDevice(IDirect3DDevice9* device) {
       {kDev_Reset,    &Hook_Reset,    reinterpret_cast<void**>(&o_Reset),    "Reset"},
       {kDev_Present,  &Hook_Present,  reinterpret_cast<void**>(&o_Present),  "Present"},
       {kDev_EndScene, &Hook_EndScene, reinterpret_cast<void**>(&o_EndScene), "EndScene"},
+      {kDev_DrawPrimitive, &Hook_DrawPrimitive,
+       reinterpret_cast<void**>(&o_DrawPrimitive), "DrawPrimitive"},
+      {kDev_DrawIndexedPrimitive, &Hook_DrawIndexedPrimitive,
+       reinterpret_cast<void**>(&o_DrawIndexedPrimitive), "DrawIndexedPrimitive"},
+      {kDev_DrawPrimitiveUP, &Hook_DrawPrimitiveUP,
+       reinterpret_cast<void**>(&o_DrawPrimitiveUP), "DrawPrimitiveUP"},
+      {kDev_DrawIndexedPrimitiveUP, &Hook_DrawIndexedPrimitiveUP,
+       reinterpret_cast<void**>(&o_DrawIndexedPrimitiveUP),
+       "DrawIndexedPrimitiveUP"},
   };
 
   bool allOk = true;

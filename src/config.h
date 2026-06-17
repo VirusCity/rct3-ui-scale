@@ -16,6 +16,16 @@ struct Config {
 
   // Absolute log-file path. Empty -> default (d3d9_uiscale.log next to the DLL).
   std::string logPath;
+
+  // --- Diagnostics: the built-in frame inspector ---------------------------
+  // When enabled, pressing `captureKey` dumps the next frame's draw calls (with
+  // render state / FVF / transforms) to the log — our in-process substitute for
+  // RenderDoc, which doesn't support D3D9. Turn off for normal play.
+  bool diagnostics = true;
+
+  // Virtual-key code for the frame-capture hotkey. Default 0x7A = VK_F11
+  // (F12 is avoided — it's the Steam screenshot key).
+  unsigned captureKey = 0x7A;
 };
 
 // Parse `iniPath` into the process-wide config. Call once at DLL attach.

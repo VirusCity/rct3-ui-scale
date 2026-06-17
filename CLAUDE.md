@@ -28,8 +28,8 @@ intercepts the game's D3D9 UI render pass and scales it up.
   about their screen anchor points.
 - Detecting the UI pass: the UI is typically drawn with depth testing disabled, alpha
   blending enabled, and an orthographic/identity transform, unlike the perspective-
-  projected 3D world. CONFIRM the exact heuristic against the user's RenderDoc captures
-  before relying on it; do not assume.
+  projected 3D world. CONFIRM the exact heuristic against the user's frame-inspector
+  dumps (see Workflow) before relying on it; do not assume.
 
 **Secondary strategy — investigate in parallel:** if Ghidra/x64dbg reveals a single
 UI-scale factor or the UI coordinate-computation routine, a small in-memory patch may be
@@ -48,7 +48,8 @@ cleaner than the full render hook. Discuss tradeoffs when the user shares findin
   reports crashes or a black screen on launch.
 
 ## Build
-- **Toolchain:** CMake + MSVC (Visual Studio 2022), configured for **Win32 (x86)**.
+- **Toolchain:** CMake + MSVC (Visual Studio 2026), configured for **Win32 (x86)**.
+  (CMake generator string: `Visual Studio 18 2026`; see `CMakePresets.json`.)
 - **Hooking library:** MinHook, x86 build, vendored under `third_party/`.
 - **Language:** C++17.
 - The build produces `d3d9.dll`. The user deploys it — do NOT attempt to copy it into the
@@ -66,7 +67,7 @@ cleaner than the full render hook. Discuss tradeoffs when the user shares findin
 
 ## Known hard problems (raise these proactively)
 1. **Separating UI draws from world draws.** Too-broad detection scales the 3D scene;
-   too-narrow misses UI elements. Refine the heuristic against the user's RenderDoc data.
+   too-narrow misses UI elements. Refine the heuristic against the frame-inspector dumps.
 2. **Input / hit-testing.** Scaling only the visuals means clicks still register at the
    original (tiny) positions. Mouse coordinates must be remapped to the scaled UI, or the
    scaling done in a way the game's own hit-testing respects. Treat this as a first-class
@@ -76,13 +77,18 @@ cleaner than the full render hook. Discuss tradeoffs when the user shares findin
 
 ## Workflow
 The user drives all live analysis; Claude writes and refines code from what they report.
-- User captures frames in **RenderDoc**, inspects draw calls/render state, and records
-  findings in `research/renderdoc_findings.md`.
+- **RenderDoc is NOT usable** — it dropped Direct3D 9 support, and DXVK-bridging fails
+  (the 32-bit process runs out of address space for a capture). Instead, frame analysis
+  is done **in-process** by the mod's own **frame inspector** (`frame_inspect.*`):
+  pressing the capture hotkey (INI `[Diagnostics] CaptureKey`, default F11) dumps the
+  next frame's draw calls — primitive type, render state, FVF/vertex-shader usage, and
+  transforms — to the log. The user pastes the relevant capture into
+  `research/ui_pass_findings.md`. This is our textual substitute for a RenderDoc capture.
 - User uses **Ghidra / x64dbg** for static/dynamic analysis and records addresses and
   signatures in `research/ghidra_notes.md`.
 - Claude reads those notes, proposes changes as reviewable diffs, and explains what to test.
-- User builds in Visual Studio, copies the DLL into the game, runs, and pastes the log
-  output back. Iterate.
+- User builds in Visual Studio (or Claude builds locally to verify), copies the DLL into
+  the game, runs, and pastes the log output back. Iterate.
 
 ## Directory map
 - `src/` — all mod source (`dllmain`, `d3d9_hooks`, `ui_scale`, `config`, `logging`).

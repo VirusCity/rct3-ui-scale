@@ -30,6 +30,15 @@ void LoadConfig(const std::string& iniPath) {
 
   // [Advanced] LogFile=  (optional override; blank => default path)
   g_config.logPath = ReadString("Advanced", "LogFile", "", iniPath);
+
+  // [Diagnostics] Enabled=1
+  g_config.diagnostics =
+      GetPrivateProfileIntA("Diagnostics", "Enabled", 1, iniPath.c_str()) != 0;
+
+  // [Diagnostics] CaptureKey=0x7A   (virtual-key code; base auto-detected)
+  std::string keyStr = ReadString("Diagnostics", "CaptureKey", "0x7A", iniPath);
+  unsigned long vk = strtoul(keyStr.c_str(), nullptr, 0);
+  if (vk > 0 && vk <= 0xFF) g_config.captureKey = static_cast<unsigned>(vk);
 }
 
 const Config& GetConfig() { return g_config; }

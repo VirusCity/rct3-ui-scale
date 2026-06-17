@@ -43,6 +43,7 @@ add_library(d3d9 SHARED
   src/d3d9_hooks.cpp
   src/d3d9_proxy_exports.cpp
   src/ui_scale.cpp
+  src/frame_inspect.cpp
   src/config.cpp
   src/logging.cpp
   src/d3d9.def        # module-definition file: exact export names + ordinals
