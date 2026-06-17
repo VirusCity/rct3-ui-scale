@@ -1,0 +1,35 @@
+# Build output
+/build/
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.obj
+
+# Logs produced at runtime
+*.log
+
+# IDE / OS cruft
+.vs/
+.vscode/
+.claude/settings.local.json
+*.user
+CMakeUserPresets.json
+Thumbs.db
+Desktop.ini
+
+# --- Never commit game-derived material (CLAUDE.md hard rule) ---
+# Game assets, executables, extracted sprites, and any disassembly dumps.
+*.ovl
+*.exe
+*.dll
+*.idb
+*.i64
+*.gpr            # Ghidra project
+*.rep
+*.bytemap
+research/_private/
+research/**/*.png
+research/**/*.bmp
+research/**/*.dds
+research/**/*.rdc  # RenderDoc captures (large, copyrighted frame data)
