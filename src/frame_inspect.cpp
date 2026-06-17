@@ -13,7 +13,9 @@ bool g_armed = false;        // capture requested for the next frame
 bool g_capturing = false;    // currently inside a captured frame
 unsigned g_drawIndex = 0;
 unsigned long long g_frame = 0;
-int g_uiBoundaryDraw = -1;   // first draw that looks like UI (Z off / RHW)
+int g_uiBoundaryDraw = -1;   // first UI-like draw (fixed-function + XYZRHW)
+int g_uiLastDraw = -1;       // last UI-like draw
+unsigned g_uiDrawCount = 0;  // count of UI-like draws this frame
 
 // Cached discriminating state, to flag the world->UI transition.
 struct KeyState {
@@ -63,6 +65,8 @@ void StartCapture(IDirect3DDevice9* dev) {
   g_capturing = true;
   g_drawIndex = 0;
   g_uiBoundaryDraw = -1;
+  g_uiLastDraw = -1;
+  g_uiDrawCount = 0;
   g_prev = KeyState{};
 
   D3DVIEWPORT9 vp{};
@@ -75,8 +79,9 @@ void StartCapture(IDirect3DDevice9* dev) {
 }
 
 void FinishCapture() {
-  LOG("=== FRAME CAPTURE END: %u draws; UI boundary @ draw %d ===", g_drawIndex,
-      g_uiBoundaryDraw);
+  LOG("=== FRAME CAPTURE END: %u draws; UI-like (VS=0 & XYZRHW) = %u draws, "
+      "range [%d..%d] ===",
+      g_drawIndex, g_uiDrawCount, g_uiBoundaryDraw, g_uiLastDraw);
   g_capturing = false;
 }
 
@@ -128,10 +133,16 @@ void OnDraw(IDirect3DDevice9* dev, const char* call, D3DPRIMITIVETYPE type,
   char fvfDesc[200];
   DescribeFVF(fvf, fvfDesc, sizeof(fvfDesc));
 
-  // Flag the world->UI transition the first time depth testing turns off, a
-  // pre-transformed FVF appears, or the pipeline drops to fixed-function.
-  bool looksUI = (zenable == D3DZB_FALSE) ||
-                 ((fvf & D3DFVF_POSITION_MASK) == D3DFVF_XYZRHW);
+  // The UI is fixed-function (no vertex shader) drawing pre-transformed XYZRHW
+  // quads. The 3D world is entirely programmable (VS=1), so this pair is a clean
+  // discriminator. (ZENABLE alone is NOT reliable — some world draws have Z off.)
+  bool isXYZRHW = (fvf & D3DFVF_POSITION_MASK) == D3DFVF_XYZRHW;
+  bool looksUI = !hasVS && isXYZRHW;
+  if (looksUI) {
+    ++g_uiDrawCount;
+    g_uiLastDraw = static_cast<int>(g_drawIndex);
+  }
+
   if (g_prev.valid &&
       (g_prev.zenable != zenable || g_prev.alphablend != alpha ||
        g_prev.hasVS != hasVS)) {
@@ -141,12 +152,9 @@ void OnDraw(IDirect3DDevice9* dev, const char* call, D3DPRIMITIVETYPE type,
   }
   if (g_uiBoundaryDraw < 0 && looksUI) {
     g_uiBoundaryDraw = static_cast<int>(g_drawIndex);
-    LOG("  >> likely UI pass begins at draw %u <<", g_drawIndex);
-    D3DMATRIX proj{};
-    if (SUCCEEDED(dev->GetTransform(D3DTS_PROJECTION, &proj)))
-      LOG("     PROJECTION row0 [%.3f %.3f %.3f %.3f] row3 [%.3f %.3f %.3f %.3f]",
-          proj.m[0][0], proj.m[0][1], proj.m[0][2], proj.m[0][3], proj.m[3][0],
-          proj.m[3][1], proj.m[3][2], proj.m[3][3]);
+    LOG("  >> UI pass begins at draw %u (fixed-function XYZRHW; "
+        "transforms/viewport are bypassed for these verts) <<",
+        g_drawIndex);
   }
 
   LOG("  [draw %3u] %-22s %-8s prims=%-5u | Z=%lu Zw=%lu A=%lu cull=%lu L=%lu "
