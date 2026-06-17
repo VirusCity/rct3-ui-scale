@@ -62,49 +62,82 @@ void ScaleDrawIfUI(IDirect3DDevice9* dev, UINT firstVertex, UINT vertexCount) {
   if (FAILED(dev->GetStreamSource(0, &vb, &offset, &stride)) || !vb) return;
   if (stride < 16) { vb->Release(); return; }  // need at least x,y,z,rhw
 
-  // Scale about the viewport center so centered windows stay put.
   D3DVIEWPORT9 vp{};
   dev->GetViewport(&vp);
-  const float cx = vp.X + vp.Width * 0.5f;
-  const float cy = vp.Y + vp.Height * 0.5f;
+  const float left = static_cast<float>(vp.X);
+  const float top = static_cast<float>(vp.Y);
+  const float W = static_cast<float>(vp.Width);
+  const float H = static_cast<float>(vp.Height);
   const float s = cfg.scale;
 
-  const UINT byteStart = offset + firstVertex * stride;
-  const UINT byteLen = vertexCount * stride;
-
   void* p = nullptr;
-  if (SUCCEEDED(vb->Lock(byteStart, byteLen, &p, 0)) && p) {
-    float* v0 = reinterpret_cast<float*>(p);
-    // Sanity check: real XYZRHW screen coords. If the VB is write-only the read
-    // is garbage and this fails — then we skip (and log once) rather than corrupt.
-    const float origX = v0[0], origY = v0[1];
-    const bool sane = origX > -4000.f && origX < 16000.f &&
-                      origY > -4000.f && origY < 16000.f;
-    if (sane) {
-      for (UINT i = 0; i < vertexCount; ++i) {
-        float* v = reinterpret_cast<float*>(static_cast<char*>(p) + i * stride);
-        v[0] = cx + (v[0] - cx) * s;
-        v[1] = cy + (v[1] - cy) * s;
-      }
-      static bool loggedOk = false;
-      if (!loggedOk) {
-        loggedOk = true;
-        LOG("uiscale: render-side scaling ACTIVE (scale=%.2f, center=%.0f,%.0f, "
-            "stride=%u). First UI vert (%.1f,%.1f) -> (%.1f,%.1f).",
-            s, cx, cy, stride, origX, origY, cx + (origX - cx) * s,
-            cy + (origY - cy) * s);
-      }
-    } else {
-      static bool loggedBad = false;
-      if (!loggedBad) {
-        loggedBad = true;
-        LOG("uiscale: UI vertex buffer not readable (first vert %.1f,%.1f looks "
-            "invalid) — render-side scaling skipped; VB is likely WRITEONLY.",
-            v0[0], v0[1]);
-      }
+  if (FAILED(vb->Lock(offset + firstVertex * stride, vertexCount * stride, &p, 0)) ||
+      !p) {
+    vb->Release();
+    return;
+  }
+
+  auto vert = [&](UINT i) {
+    return reinterpret_cast<float*>(static_cast<char*>(p) + i * stride);
+  };
+
+  // Reject unreadable (write-only) buffers: the first vertex must be a plausible
+  // screen coordinate, else we'd be scaling garbage.
+  float* f0 = vert(0);
+  if (!(f0[0] > -8000.f && f0[0] < 24000.f && f0[1] > -8000.f && f0[1] < 24000.f)) {
+    static bool loggedBad = false;
+    if (!loggedBad) {
+      loggedBad = true;
+      LOG("uiscale: UI vertex buffer not readable (first vert %.1f,%.1f) — "
+          "scaling skipped; VB is likely WRITEONLY.", f0[0], f0[1]);
     }
     vb->Unlock();
+    vb->Release();
+    return;
   }
+
+  // Bounding box of this draw's vertices.
+  float minx = f0[0], maxx = f0[0], miny = f0[1], maxy = f0[1];
+  for (UINT i = 1; i < vertexCount; ++i) {
+    float* v = vert(i);
+    if (v[0] < minx) minx = v[0]; else if (v[0] > maxx) maxx = v[0];
+    if (v[1] < miny) miny = v[1]; else if (v[1] > maxy) maxy = v[1];
+  }
+
+  // Leave near-fullscreen quads (backgrounds / dimmers) alone — scaling them only
+  // pushes their edges off-screen.
+  if ((maxx - minx) > 0.85f * W && (maxy - miny) > 0.85f * H) {
+    vb->Unlock();
+    vb->Release();
+    return;
+  }
+
+  // Anchor each element to its screen region (3x3 zones), so corner/edge elements
+  // grow in place on their corner instead of being flung toward one global point.
+  const float bcx = (minx + maxx) * 0.5f;
+  const float bcy = (miny + maxy) * 0.5f;
+  const float ax = (bcx < left + W / 3)       ? left
+                   : (bcx > left + 2 * W / 3)  ? left + W
+                                              : left + W * 0.5f;
+  const float ay = (bcy < top + H / 3)        ? top
+                   : (bcy > top + 2 * H / 3)   ? top + H
+                                              : top + H * 0.5f;
+
+  for (UINT i = 0; i < vertexCount; ++i) {
+    float* v = vert(i);
+    v[0] = ax + (v[0] - ax) * s;
+    v[1] = ay + (v[1] - ay) * s;
+  }
+
+  static bool loggedOk = false;
+  if (!loggedOk) {
+    loggedOk = true;
+    LOG("uiscale: scaling ACTIVE (scale=%.2f, viewport %.0fx%.0f). First UI draw "
+        "bbox [%.0f,%.0f .. %.0f,%.0f] anchored at (%.0f,%.0f).",
+        s, W, H, minx, miny, maxx, maxy, ax, ay);
+  }
+
+  vb->Unlock();
   vb->Release();
 }
 
