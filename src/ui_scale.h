@@ -27,11 +27,16 @@ void OnEndScene(IDirect3DDevice9* device);
 void OnPreReset(IDirect3DDevice9* device);
 void OnPostReset(IDirect3DDevice9* device, D3DPRESENT_PARAMETERS* pp);
 
-// Pick the 3x3-zone anchor for a point in the viewport. Shared by the vertex
-// scaling (anchor = element bbox center) and the input remap (anchor = cursor),
-// so the mouse inverse-transform matches the visual transform exactly.
+// Pick the 3x3-zone anchor for a point in the viewport (used by the renderer to
+// choose each element's growth anchor).
 void PickZoneAnchor(float px, float py, float left, float top, float W, float H,
                     float& ax, float& ay);
+
+// Map a window-message cursor (x,y) back to the original layout coordinate IF it
+// is over a scaled UI element (using that element's exact anchor/scale). Returns
+// false when the cursor is not over any UI element, so the caller passes world /
+// 3D cursors through unchanged. Thread-safe.
+bool MapCursorToOriginal(int x, int y, int& ox, int& oy);
 
 // Render-side proof: called from the VB-based draw detours BEFORE the real draw.
 // If this looks like a UI draw (fixed-function + XYZRHW) and the bound vertex

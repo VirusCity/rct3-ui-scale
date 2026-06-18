@@ -22,20 +22,12 @@ LRESULT CALLBACK HookProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
   if (IsClientMouseMsg(msg)) {
     const Config& cfg = GetConfig();
     if (cfg.remapInput && cfg.renderSideScale && cfg.scale != 1.0f) {
-      RECT rc{};
-      GetClientRect(hwnd, &rc);
-      const float W = static_cast<float>(rc.right - rc.left);
-      const float H = static_cast<float>(rc.bottom - rc.top);
-      if (W > 0 && H > 0) {
-        const int x = static_cast<short>(LOWORD(lParam));
-        const int y = static_cast<short>(HIWORD(lParam));
-        float ax, ay;
-        uiscale::PickZoneAnchor(static_cast<float>(x), static_cast<float>(y),
-                                0.f, 0.f, W, H, ax, ay);
-        const float s = cfg.scale;
-        // Inverse of the renderer's transform: screen -> original layout coord.
-        const int nx = static_cast<int>(ax + (x - ax) / s + 0.5f);
-        const int ny = static_cast<int>(ay + (y - ay) / s + 0.5f);
+      const int x = static_cast<short>(LOWORD(lParam));
+      const int y = static_cast<short>(HIWORD(lParam));
+      int nx = 0, ny = 0;
+      // Only transform when the cursor is over a scaled UI element; otherwise
+      // leave it untouched so 3D world picking / placement stays 1:1 (no jumps).
+      if (uiscale::MapCursorToOriginal(x, y, nx, ny)) {
         lParam = static_cast<LPARAM>(((ny & 0xFFFF) << 16) | (nx & 0xFFFF));
       }
     }

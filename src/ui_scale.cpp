@@ -8,16 +8,81 @@ namespace {
 
 unsigned long long g_frame = 0;
 
+// Per-frame record of each scaled UI element: its final on-screen rect plus the
+// anchor/scale used, so the input remap can (a) tell when the cursor is over a
+// UI element and (b) invert exactly that element's transform. Double-buffered:
+// the renderer fills `build` during a frame; at Present we swap it to `active`,
+// which the window-proc reads. Cursors NOT over any rect pass through unchanged
+// (world picking/placement stays 1:1).
+struct UiRect {
+  float x0, y0, x1, y1;  // scaled screen rect
+  float ax, ay;          // anchor used
+  float s;               // scale used
+};
+constexpr int kMaxRects = 2048;
+UiRect g_bufA[kMaxRects];
+UiRect g_bufB[kMaxRects];
+UiRect* g_build = g_bufA;
+UiRect* g_active = g_bufB;
+int g_buildN = 0;
+int g_activeN = 0;
+CRITICAL_SECTION g_cs;
+bool g_csInit = false;
+
+void RecordRect(float x0, float y0, float x1, float y1, float ax, float ay,
+                float s) {
+  if (g_buildN < kMaxRects)
+    g_build[g_buildN++] = UiRect{x0, y0, x1, y1, ax, ay, s};
+}
+
 }  // namespace
 
 void OnDeviceCreated(IDirect3DDevice9* device) {
   LOG("uiscale: device created %p, configured scale=%.3f", (void*)device,
       GetConfig().scale);
   g_frame = 0;
+  if (!g_csInit) {
+    InitializeCriticalSection(&g_cs);
+    g_csInit = true;
+  }
+  g_buildN = 0;
+  g_activeN = 0;
+}
+
+// Map a window-message cursor (x,y) to the original layout coordinate IF it sits
+// over a scaled UI element (searched top-most first). Returns false otherwise,
+// so the caller leaves world/3D cursors untouched.
+bool MapCursorToOriginal(int x, int y, int& ox, int& oy) {
+  if (!g_csInit) return false;
+  bool hit = false;
+  EnterCriticalSection(&g_cs);
+  for (int i = g_activeN - 1; i >= 0; --i) {
+    const UiRect& r = g_active[i];
+    if (x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1) {
+      ox = static_cast<int>(r.ax + (x - r.ax) / r.s + 0.5f);
+      oy = static_cast<int>(r.ay + (y - r.ay) / r.s + 0.5f);
+      hit = true;
+      break;
+    }
+  }
+  LeaveCriticalSection(&g_cs);
+  return hit;
 }
 
 void OnPresent(IDirect3DDevice9* /*device*/) {
   ++g_frame;
+
+  // End of frame: publish the UI rects we collected to the input remap.
+  if (g_csInit) {
+    EnterCriticalSection(&g_cs);
+    UiRect* tmp = g_active;
+    g_active = g_build;
+    g_build = tmp;
+    g_activeN = g_buildN;
+    g_buildN = 0;
+    LeaveCriticalSection(&g_cs);
+  }
+
   // Heartbeat so the log shows the hook chain is alive without flooding.
   if (g_frame == 1 || g_frame % 600 == 0)
     LOG("uiscale: frame %llu (Present hook live)", g_frame);
@@ -134,6 +199,10 @@ void ScaleDrawIfUI(IDirect3DDevice9* dev, UINT firstVertex, UINT vertexCount) {
     v[0] = ax + (v[0] - ax) * s;
     v[1] = ay + (v[1] - ay) * s;
   }
+
+  // Record the scaled rect so the input remap can hit-test the cursor against it.
+  RecordRect(ax + (minx - ax) * s, ay + (miny - ay) * s, ax + (maxx - ax) * s,
+             ay + (maxy - ay) * s, ax, ay, s);
 
   static bool loggedOk = false;
   if (!loggedOk) {
