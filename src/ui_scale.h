@@ -27,6 +27,9 @@ void OnEndScene(IDirect3DDevice9* device);
 void OnPreReset(IDirect3DDevice9* device);
 void OnPostReset(IDirect3DDevice9* device, D3DPRESENT_PARAMETERS* pp);
 
+// Arm a one-shot diagnostic dump of the next `n` scaled UI draws' bbox+anchor.
+void RequestRectDump(int n);
+
 // Map a window-message cursor (x,y) back to the original layout coordinate IF it
 // is over a scaled UI element (using that element's exact anchor/scale). Returns
 // false when the cursor is not over any UI element, so the caller passes world /

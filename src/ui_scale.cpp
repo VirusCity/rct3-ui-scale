@@ -12,6 +12,10 @@ unsigned long long g_frame = 0;
 bool g_runtimeEnabled = true;
 bool g_togglePrevDown = false;
 
+// Diagnostic: when > 0, log the next N scaled UI draws' bbox + anchor (armed by
+// the frame-inspector capture key) so we can see how each element is anchored.
+int g_dumpRects = 0;
+
 // Per-frame record of each scaled UI element: its final on-screen rect plus the
 // anchor/scale used, so the input remap can (a) tell when the cursor is over a
 // UI element and (b) invert exactly that element's transform. Double-buffered:
@@ -53,6 +57,9 @@ void OnDeviceCreated(IDirect3DDevice9* device) {
   g_buildN = 0;
   g_activeN = 0;
 }
+
+// Arm a one-shot dump of the next `n` scaled UI draws' bbox + anchor (diagnostic).
+void RequestRectDump(int n) { g_dumpRects = n; }
 
 // Map a window-message cursor (x,y) to the original layout coordinate IF it sits
 // over a scaled UI element (searched top-most first). Returns false otherwise,
@@ -132,14 +139,21 @@ void OnEndScene(IDirect3DDevice9* /*device*/) {
 // split across zone boundaries and flying apart.
 void EdgeAnchor(float minx, float miny, float maxx, float maxy, float left,
                 float top, float W, float H, float& ax, float& ay) {
-  const float mx = W * 0.06f;
-  const float my = H * 0.06f;
-  ax = (minx <= left + mx)      ? left
-       : (maxx >= left + W - mx) ? left + W
-                                 : left + W * 0.5f;
-  ay = (miny <= top + my)       ? top
-       : (maxy >= top + H - my)  ? top + H
-                                 : top + H * 0.5f;
+  const float mx = W * 0.06f, my = H * 0.06f;
+  const float cx = left + W * 0.5f, cy = top + H * 0.5f;
+  const float bcx = (minx + maxx) * 0.5f, bcy = (miny + maxy) * 0.5f;
+  const bool dl = minx <= left + mx;       // docked to the left edge
+  const bool dr = maxx >= left + W - mx;    // ... right
+  const bool dt = miny <= top + my;         // ... top
+  const bool db = maxy >= top + H - my;     // ... bottom
+
+  // X anchor: docked left/right -> that edge; if docked only top/bottom, snap to
+  // the nearer side; otherwise (floating) center.
+  ax = dl ? left : dr ? left + W : (dt || db) ? (bcx < cx ? left : left + W) : cx;
+  // Y anchor: docked top/bottom -> that edge; if docked only left/right, snap to
+  // the nearer top/bottom (so a corner toolbar grows inward, not off-screen);
+  // otherwise center.
+  ay = dt ? top : db ? top + H : (dl || dr) ? (bcy < cy ? top : top + H) : cy;
 }
 
 void ScaleDrawIfUI(IDirect3DDevice9* dev, UINT firstVertex, UINT vertexCount) {
@@ -225,6 +239,17 @@ void ScaleDrawIfUI(IDirect3DDevice9* dev, UINT firstVertex, UINT vertexCount) {
   // Record the scaled rect so the input remap can hit-test the cursor against it.
   RecordRect(ax + (minx - ax) * s, ay + (miny - ay) * s, ax + (maxx - ax) * s,
              ay + (maxy - ay) * s, ax, ay, s);
+
+  if (g_dumpRects > 0) {
+    --g_dumpRects;
+    LOG("uiscale[dump]: %s bbox [%.0f,%.0f .. %.0f,%.0f] (%.0fx%.0f) "
+        "anchor (%.0f,%.0f) stride=%u",
+        ((minx <= left + W * 0.06f || maxx >= left + W - W * 0.06f ||
+          miny <= top + H * 0.06f || maxy >= top + H - H * 0.06f)
+             ? "DOCKED"
+             : "float "),
+        minx, miny, maxx, maxy, maxx - minx, maxy - miny, ax, ay, stride);
+  }
 
   static bool loggedOk = false;
   if (!loggedOk) {

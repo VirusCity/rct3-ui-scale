@@ -12,6 +12,10 @@
 # Logs produced at runtime
 *.log
 
+# Convenience copies dropped at the project root by the post-build step
+/d3d9.dll
+/d3d9_uiscale.ini
+
 # IDE / OS cruft
 .vs/
 .vscode/

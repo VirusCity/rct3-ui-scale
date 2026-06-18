@@ -64,3 +64,14 @@ set_target_properties(d3d9 PROPERTIES OUTPUT_NAME "d3d9" PREFIX "")
 # Generate a .pdb in all configs to aid blind debugging of crash reports.
 target_compile_options(d3d9 PRIVATE $<$<CONFIG:Release>:/Zi>)
 target_link_options(d3d9 PRIVATE $<$<CONFIG:Release>:/DEBUG /OPT:REF /OPT:ICF>)
+
+# Convenience: after each build, drop the DLL + the (pre-configured) .ini at the
+# project root so they're trivial to copy into the game folder. Both root copies
+# are gitignored.
+add_custom_command(TARGET d3d9 POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          $<TARGET_FILE:d3d9> ${CMAKE_SOURCE_DIR}/d3d9.dll
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          ${CMAKE_SOURCE_DIR}/config/d3d9_uiscale.ini
+          ${CMAKE_SOURCE_DIR}/d3d9_uiscale.ini
+  COMMENT "Copying d3d9.dll + d3d9_uiscale.ini to project root for deployment")

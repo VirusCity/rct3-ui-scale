@@ -4,6 +4,7 @@
 
 #include "config.h"
 #include "logging.h"
+#include "ui_scale.h"
 
 namespace frameinspect {
 namespace {
@@ -139,6 +140,7 @@ void OnFrameBoundary(IDirect3DDevice9* device) {
   g_prevKeyDown = down;
   if (edge && !g_capturing) {
     g_armed = true;
+    uiscale::RequestRectDump(400);  // also dump scaled UI rects + anchors
     LOG("frameinspect: capture armed (key 0x%X) — dumping next frame",
         cfg.captureKey);
   }
