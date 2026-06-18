@@ -142,18 +142,27 @@ void EdgeAnchor(float minx, float miny, float maxx, float maxy, float left,
   const float mx = W * 0.06f, my = H * 0.06f;
   const float cx = left + W * 0.5f, cy = top + H * 0.5f;
   const float bcx = (minx + maxx) * 0.5f, bcy = (miny + maxy) * 0.5f;
-  const bool dl = minx <= left + mx;       // docked to the left edge
-  const bool dr = maxx >= left + W - mx;    // ... right
-  const bool dt = miny <= top + my;         // ... top
-  const bool db = maxy >= top + H - my;     // ... bottom
 
-  // X anchor: docked left/right -> that edge; if docked only top/bottom, snap to
-  // the nearer side; otherwise (floating) center.
-  ax = dl ? left : dr ? left + W : (dt || db) ? (bcx < cx ? left : left + W) : cx;
-  // Y anchor: docked top/bottom -> that edge; if docked only left/right, snap to
-  // the nearer top/bottom (so a corner toolbar grows inward, not off-screen);
-  // otherwise center.
-  ay = dt ? top : db ? top + H : (dl || dr) ? (bcy < cy ? top : top + H) : cy;
+  // "Docked" = touches an edge AND is a thin strip along it. The thinness test
+  // (extends <30% of the perpendicular dimension from the edge) stops large
+  // elements that merely REACH an edge — e.g. a window's tall chrome that
+  // touches the top — from being yanked to the corner; those stay floating.
+  const bool dl = (minx <= left + mx)     && (maxx <= left + 0.30f * W);
+  const bool dr = (maxx >= left + W - mx) && (minx >= left + 0.70f * W);
+  const bool dt = (miny <= top + my)      && (maxy <= top + 0.30f * H);
+  const bool db = (maxy >= top + H - my)  && (miny >= top + 0.70f * H);
+
+  // Place the free axis by thirds: center when the element sits near the middle,
+  // so a centered bar/column anchors to center instead of being split between
+  // two opposite edge anchors.
+  auto third = [](float c, float lo, float span) {
+    return (c < lo + span / 3)       ? lo
+           : (c > lo + 2 * span / 3) ? lo + span
+                                     : lo + span * 0.5f;
+  };
+
+  ax = dl ? left : dr ? (left + W) : (dt || db) ? third(bcx, left, W) : cx;
+  ay = dt ? top : db ? (top + H) : (dl || dr) ? third(bcy, top, H) : cy;
 }
 
 void ScaleDrawIfUI(IDirect3DDevice9* dev, UINT firstVertex, UINT vertexCount) {
