@@ -30,6 +30,8 @@ Desktop.ini
 /ghidra_12.1.2_PUBLIC/
 /ghidra_work/
 /ghidra_rct3/
+# x64dbg/x32dbg install + plugin SDK (huge, local debugging tool)
+/x64dbg/
 
 # --- Never commit game-derived material (CLAUDE.md hard rule) ---
 # Game assets, executables, extracted sprites, Ghidra projects, disassembly dumps

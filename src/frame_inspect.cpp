@@ -65,6 +65,37 @@ void DumpStackToExe() {
   LOG("=== end stack (%d frames) ===", found);
 }
 
+// Read 16 floats (a 4x4 matrix) from exe_base + probeRVA and log them. Used to
+// characterise the GUI2 global transform matrix (ghidra_notes.md): is it a real
+// screen-pixel transform (a scale/translate to enlarge) or identity (dead end)?
+// Also compares to the previous capture so we learn if it's rebuilt per relayout
+// (would need a hook) or stable (one-shot patchable). Read-only.
+float g_lastProbe[16] = {0};
+bool g_haveLastProbe = false;
+
+void DumpProbeMatrix(unsigned probeRVA) {
+  if (!probeRVA) return;
+  HMODULE exe = GetModuleHandleA(nullptr);
+  if (!exe) return;
+  const float* m =
+      reinterpret_cast<const float*>(reinterpret_cast<char*>(exe) + probeRVA);
+  // Guard against an unmapped/garbage RVA: probe readability first.
+  if (IsBadReadPtr(m, 16 * sizeof(float))) {
+    LOG("probe: exe+0x%X not readable — wrong RVA?", probeRVA);
+    return;
+  }
+  bool changed = !g_haveLastProbe;
+  for (int i = 0; i < 16; ++i)
+    if (m[i] != g_lastProbe[i]) changed = true;
+  LOG("probe: 4x4 matrix @ exe+0x%X (%s since last capture):", probeRVA,
+      g_haveLastProbe ? (changed ? "CHANGED" : "stable") : "first");
+  for (int r = 0; r < 4; ++r)
+    LOG("  [ %12.4f %12.4f %12.4f %12.4f ]", m[r * 4 + 0], m[r * 4 + 1],
+        m[r * 4 + 2], m[r * 4 + 3]);
+  for (int i = 0; i < 16; ++i) g_lastProbe[i] = m[i];
+  g_haveLastProbe = true;
+}
+
 // Cached discriminating state, to flag the world->UI transition.
 struct KeyState {
   DWORD zenable = 0xFFFFFFFF;
@@ -177,6 +208,7 @@ void OnFrameBoundary(IDirect3DDevice9* device) {
   if (edge && !g_capturing) {
     g_armed = true;
     uiscale::RequestRectDump(400);  // also dump scaled UI rects + anchors
+    DumpProbeMatrix(cfg.probeRVA);  // dump the GUI2 transform matrix candidate
     LOG("frameinspect: capture armed (key 0x%X) — dumping next frame",
         cfg.captureKey);
   }

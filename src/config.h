@@ -27,6 +27,12 @@ struct Config {
   // (F12 is avoided — it's the Steam screenshot key).
   unsigned captureKey = 0x7A;
 
+  // Diagnostic probe: on capture, dump 16 floats (a 4x4 matrix) read from
+  // exe_base + probeRVA. Used to characterise the GUI2 global transform matrix
+  // (research/ghidra_notes.md: static VA 0x1588100 -> RVA 0x1188100). 0 = off.
+  // Sourced from headless analysis; override here if the build differs.
+  unsigned probeRVA = 0x1188100;
+
   // --- Render-side scaling proof -------------------------------------------
   // When on, UI draws (fixed-function XYZRHW) have their vertex x/y scaled about
   // screen center by `scale`, in place, just before the draw. This is the
@@ -42,6 +48,14 @@ struct Config {
   // Virtual-key that toggles scaling on/off at runtime — e.g. turn it off on the
   // main menu / scenario select, on once in a park. Default 0x79 = F10.
   unsigned toggleKey = 0x79;
+
+  // --- Source patch (experimental, see research/ghidra_notes.md) -----------
+  // When on, at startup we signature-patch the GUI2 element constructors so the
+  // per-element scale at `element + 0xF0` defaults to `scale` instead of 1.0,
+  // i.e. ask the game to lay the UI out bigger itself (fixing render AND clicks
+  // at the source). Independent of renderSideScale — do NOT enable both at once
+  // or the UI is scaled twice. Default off until the experiment is confirmed.
+  bool sourcePatch = false;
 };
 
 // Parse `iniPath` into the process-wide config. Call once at DLL attach.

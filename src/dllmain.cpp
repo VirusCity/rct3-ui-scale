@@ -14,6 +14,7 @@
 #include "d3d9_hooks.h"
 #include "input_remap.h"
 #include "logging.h"
+#include "source_patch.h"
 
 namespace {
 
@@ -43,6 +44,17 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID /*reserved*/) {
       logger::Init(cfg.logEnabled, logPath);
       LOG("dllmain: attach. dir=%s scale=%.3f logging=%d", dir.c_str(),
           cfg.scale, cfg.logEnabled ? 1 : 0);
+
+      // Experimental source patch: raise the GUI2 per-element default scale at
+      // its source. Must run before the game constructs any UI element, so we do
+      // it here at attach (the exe is mapped; no UI exists yet). Independent of
+      // the D3D proxy/hooks below.
+      if (cfg.sourcePatch) {
+        if (cfg.renderSideScale)
+          LOG("dllmain: WARNING — both SourcePatch and render-side Scaling are "
+              "on; the UI will be scaled twice. Disable one.");
+        sourcepatch::ApplyGui2ScaleDefault(cfg.scale);
+      }
 
       if (!proxy::Init()) {
         LOG("dllmain: proxy init failed — the game may not render. Aborting hook setup.");

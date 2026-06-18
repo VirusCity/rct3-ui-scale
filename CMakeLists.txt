@@ -45,6 +45,7 @@ add_library(d3d9 SHARED
   src/ui_scale.cpp
   src/frame_inspect.cpp
   src/input_remap.cpp
+  src/source_patch.cpp
   src/config.cpp
   src/logging.cpp
   src/d3d9.def        # module-definition file: exact export names + ordinals

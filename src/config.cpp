@@ -40,6 +40,10 @@ void LoadConfig(const std::string& iniPath) {
   unsigned long vk = strtoul(keyStr.c_str(), nullptr, 0);
   if (vk > 0 && vk <= 0xFF) g_config.captureKey = static_cast<unsigned>(vk);
 
+  // [Diagnostics] ProbeRVA=0x1188100  (matrix-dump probe; 0 disables)
+  std::string prStr = ReadString("Diagnostics", "ProbeRVA", "0x1188100", iniPath);
+  g_config.probeRVA = static_cast<unsigned>(strtoul(prStr.c_str(), nullptr, 0));
+
   // [Scaling] Enabled=1   (render-side proof toggle)
   g_config.renderSideScale =
       GetPrivateProfileIntA("Scaling", "Enabled", 1, iniPath.c_str()) != 0;
@@ -52,6 +56,10 @@ void LoadConfig(const std::string& iniPath) {
   std::string tkStr = ReadString("Scaling", "ToggleKey", "0x79", iniPath);
   unsigned long tvk = strtoul(tkStr.c_str(), nullptr, 0);
   if (tvk > 0 && tvk <= 0xFF) g_config.toggleKey = static_cast<unsigned>(tvk);
+
+  // [SourcePatch] Enabled=0   (experimental GUI2 +0xF0 default-scale patch)
+  g_config.sourcePatch =
+      GetPrivateProfileIntA("SourcePatch", "Enabled", 0, iniPath.c_str()) != 0;
 }
 
 const Config& GetConfig() { return g_config; }
