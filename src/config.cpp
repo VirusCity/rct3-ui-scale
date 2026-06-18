@@ -47,6 +47,11 @@ void LoadConfig(const std::string& iniPath) {
   // [Scaling] RemapInput=1   (mouse coordinate remap)
   g_config.remapInput =
       GetPrivateProfileIntA("Scaling", "RemapInput", 1, iniPath.c_str()) != 0;
+
+  // [Scaling] ToggleKey=0x79   (runtime on/off hotkey)
+  std::string tkStr = ReadString("Scaling", "ToggleKey", "0x79", iniPath);
+  unsigned long tvk = strtoul(tkStr.c_str(), nullptr, 0);
+  if (tvk > 0 && tvk <= 0xFF) g_config.toggleKey = static_cast<unsigned>(tvk);
 }
 
 const Config& GetConfig() { return g_config; }

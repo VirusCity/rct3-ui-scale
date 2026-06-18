@@ -8,6 +8,10 @@ namespace {
 
 unsigned long long g_frame = 0;
 
+// Runtime on/off (toggled by the hotkey); initial state from [Scaling] Enabled.
+bool g_runtimeEnabled = true;
+bool g_togglePrevDown = false;
+
 // Per-frame record of each scaled UI element: its final on-screen rect plus the
 // anchor/scale used, so the input remap can (a) tell when the cursor is over a
 // UI element and (b) invert exactly that element's transform. Double-buffered:
@@ -41,6 +45,7 @@ void OnDeviceCreated(IDirect3DDevice9* device) {
   LOG("uiscale: device created %p, configured scale=%.3f", (void*)device,
       GetConfig().scale);
   g_frame = 0;
+  g_runtimeEnabled = GetConfig().renderSideScale;
   if (!g_csInit) {
     InitializeCriticalSection(&g_cs);
     g_csInit = true;
@@ -71,6 +76,16 @@ bool MapCursorToOriginal(int x, int y, int& ox, int& oy) {
 
 void OnPresent(IDirect3DDevice9* /*device*/) {
   ++g_frame;
+
+  // Runtime scale toggle (e.g. off on menus, on in a park).
+  const unsigned tk = GetConfig().toggleKey;
+  const bool tdown = tk && (GetAsyncKeyState(static_cast<int>(tk)) & 0x8000) != 0;
+  if (tdown && !g_togglePrevDown) {
+    g_runtimeEnabled = !g_runtimeEnabled;
+    LOG("uiscale: scaling toggled %s (key 0x%X)", g_runtimeEnabled ? "ON" : "OFF",
+        tk);
+  }
+  g_togglePrevDown = tdown;
 
   // End of frame: publish the UI rects we collected to the input remap.
   if (g_csInit) {
@@ -109,19 +124,28 @@ void OnEndScene(IDirect3DDevice9* /*device*/) {
   // ========================================================================
 }
 
-void PickZoneAnchor(float px, float py, float left, float top, float W, float H,
-                    float& ax, float& ay) {
-  ax = (px < left + W / 3)      ? left
-       : (px > left + 2 * W / 3) ? left + W
+// Choose the scaling anchor by EDGE CONTACT, not by where the center falls. Only
+// elements that actually touch a screen edge (within a margin) dock to that
+// edge; everything else (floating windows, mid-screen panels, icon columns)
+// anchors to screen center. This keeps a window's body and its chrome — and a
+// stack of icons — sharing one anchor, so they scale together instead of being
+// split across zone boundaries and flying apart.
+void EdgeAnchor(float minx, float miny, float maxx, float maxy, float left,
+                float top, float W, float H, float& ax, float& ay) {
+  const float mx = W * 0.06f;
+  const float my = H * 0.06f;
+  ax = (minx <= left + mx)      ? left
+       : (maxx >= left + W - mx) ? left + W
                                  : left + W * 0.5f;
-  ay = (py < top + H / 3)       ? top
-       : (py > top + 2 * H / 3)  ? top + H
+  ay = (miny <= top + my)       ? top
+       : (maxy >= top + H - my)  ? top + H
                                  : top + H * 0.5f;
 }
 
 void ScaleDrawIfUI(IDirect3DDevice9* dev, UINT firstVertex, UINT vertexCount) {
   const Config& cfg = GetConfig();
-  if (!cfg.renderSideScale || cfg.scale == 1.0f || !dev || vertexCount == 0)
+  // g_runtimeEnabled folds in [Scaling] Enabled and the runtime toggle hotkey.
+  if (!g_runtimeEnabled || cfg.scale == 1.0f || !dev || vertexCount == 0)
     return;
 
   // UI discriminator (proven by the frame inspector): fixed-function + XYZRHW.
@@ -187,12 +211,10 @@ void ScaleDrawIfUI(IDirect3DDevice9* dev, UINT firstVertex, UINT vertexCount) {
     return;
   }
 
-  // Anchor each element to its screen region (3x3 zones), so corner/edge elements
-  // grow in place on their corner instead of being flung toward one global point.
-  const float bcx = (minx + maxx) * 0.5f;
-  const float bcy = (miny + maxy) * 0.5f;
+  // Anchor by edge contact (see EdgeAnchor): docked elements stay on their edge;
+  // floating windows + their chrome share the center anchor and move together.
   float ax, ay;
-  PickZoneAnchor(bcx, bcy, left, top, W, H, ax, ay);
+  EdgeAnchor(minx, miny, maxx, maxy, left, top, W, H, ax, ay);
 
   for (UINT i = 0; i < vertexCount; ++i) {
     float* v = vert(i);

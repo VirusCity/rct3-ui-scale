@@ -19,17 +19,16 @@ bool IsClientMouseMsg(UINT msg) {
 }
 
 LRESULT CALLBACK HookProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-  if (IsClientMouseMsg(msg)) {
-    const Config& cfg = GetConfig();
-    if (cfg.remapInput && cfg.renderSideScale && cfg.scale != 1.0f) {
-      const int x = static_cast<short>(LOWORD(lParam));
-      const int y = static_cast<short>(HIWORD(lParam));
-      int nx = 0, ny = 0;
-      // Only transform when the cursor is over a scaled UI element; otherwise
-      // leave it untouched so 3D world picking / placement stays 1:1 (no jumps).
-      if (uiscale::MapCursorToOriginal(x, y, nx, ny)) {
-        lParam = static_cast<LPARAM>(((ny & 0xFFFF) << 16) | (nx & 0xFFFF));
-      }
+  if (IsClientMouseMsg(msg) && GetConfig().remapInput) {
+    const int x = static_cast<short>(LOWORD(lParam));
+    const int y = static_cast<short>(HIWORD(lParam));
+    int nx = 0, ny = 0;
+    // Only transform when the cursor is over a currently-scaled UI element (the
+    // renderer's per-frame rect list — empty when scaling is toggled off, so
+    // this naturally no-ops then). Everything else (3D world) passes through
+    // unchanged, keeping world picking / placement 1:1 with no jumps.
+    if (uiscale::MapCursorToOriginal(x, y, nx, ny)) {
+      lParam = static_cast<LPARAM>(((ny & 0xFFFF) << 16) | (nx & 0xFFFF));
     }
   }
   return CallWindowProc(g_origProc, hwnd, msg, wParam, lParam);

@@ -38,6 +38,10 @@ struct Config {
   // UI transform, so clicks land on the scaled elements. Separate toggle so it
   // can be A/B tested against world-picking behaviour.
   bool remapInput = true;
+
+  // Virtual-key that toggles scaling on/off at runtime — e.g. turn it off on the
+  // main menu / scenario select, on once in a park. Default 0x79 = F10.
+  unsigned toggleKey = 0x79;
 };
 
 // Parse `iniPath` into the process-wide config. Call once at DLL attach.
