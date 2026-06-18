@@ -2,6 +2,8 @@
 
 #include <windows.h>
 
+#include <intrin.h>  // _AddressOfReturnAddress
+
 #include "config.h"
 #include "logging.h"
 #include "ui_scale.h"
@@ -28,6 +30,39 @@ void RecordUICaller(void* caller) {
     if (g_uiCallers[i] == caller) return;  // already seen
   if (g_uiCallerCount < _countof(g_uiCallers))
     g_uiCallers[g_uiCallerCount++] = caller;
+}
+
+bool g_stackDumped = false;  // one stack walk per capture
+
+// Walk the current thread's stack and log return addresses that land in
+// RCT3.exe's code — the real UI render -> layout call chain (the static call
+// graph misses it because the UI reaches the draw via an indirect call). We
+// scan the raw stack (robust to FPO) and keep slots preceded by a CALL opcode.
+void DumpStackToExe() {
+  HMODULE exe = GetModuleHandleA(nullptr);
+  if (!exe) return;
+  auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(exe);
+  auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(
+      reinterpret_cast<char*>(exe) + dos->e_lfanew);
+  const uintptr_t base = reinterpret_cast<uintptr_t>(exe);
+  const uintptr_t codeStart = base + nt->OptionalHeader.BaseOfCode;
+  const uintptr_t codeEnd = codeStart + nt->OptionalHeader.SizeOfCode;
+
+  uintptr_t* sp = reinterpret_cast<uintptr_t*>(_AddressOfReturnAddress());
+  LOG("=== UI-draw STACK (return addrs into RCT3.exe; the render->layout chain) ===");
+  int found = 0;
+  for (int i = 0; i < 400 && found < 28; ++i) {
+    const uintptr_t v = sp[i];
+    if (v <= codeStart + 8 || v >= codeEnd) continue;
+    const unsigned char* p = reinterpret_cast<const unsigned char*>(v);
+    // A real return address is preceded by a CALL: E8 rel32 (5B) or FF /2 forms.
+    const bool isCall = p[-5] == 0xE8 || p[-2] == 0xFF || p[-3] == 0xFF ||
+                        p[-6] == 0xFF || p[-7] == 0xFF;
+    if (!isCall) continue;
+    LOG("  [%2d] RCT3.exe+0x%IX", found, v - base);
+    ++found;
+  }
+  LOG("=== end stack (%d frames) ===", found);
 }
 
 // Cached discriminating state, to flag the world->UI transition.
@@ -81,6 +116,7 @@ void StartCapture(IDirect3DDevice9* dev) {
   g_uiLastDraw = -1;
   g_uiDrawCount = 0;
   g_uiCallerCount = 0;
+  g_stackDumped = false;
   g_prev = KeyState{};
 
   D3DVIEWPORT9 vp{};
@@ -190,6 +226,10 @@ void OnDraw(IDirect3DDevice9* dev, const char* call, D3DPRIMITIVETYPE type,
     LOG("  >> UI pass begins at draw %u (fixed-function XYZRHW; "
         "transforms/viewport are bypassed for these verts) <<",
         g_drawIndex);
+  }
+  if (looksUI && !g_stackDumped) {
+    g_stackDumped = true;
+    DumpStackToExe();
   }
 
   LOG("  [draw %3u] %-22s %-8s prims=%-5u | Z=%lu Zw=%lu A=%lu cull=%lu L=%lu "
