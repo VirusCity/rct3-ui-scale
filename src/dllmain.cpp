@@ -12,6 +12,7 @@
 #include "MinHook.h"
 #include "config.h"
 #include "d3d9_hooks.h"
+#include "input_remap.h"
 #include "logging.h"
 
 namespace {
@@ -57,6 +58,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID /*reserved*/) {
 
     case DLL_PROCESS_DETACH: {
       LOG("dllmain: detach.");
+      inputremap::Remove();
       MH_DisableHook(MH_ALL_HOOKS);
       MH_Uninitialize();
       logger::Shutdown();

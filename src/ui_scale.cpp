@@ -44,6 +44,16 @@ void OnEndScene(IDirect3DDevice9* /*device*/) {
   // ========================================================================
 }
 
+void PickZoneAnchor(float px, float py, float left, float top, float W, float H,
+                    float& ax, float& ay) {
+  ax = (px < left + W / 3)      ? left
+       : (px > left + 2 * W / 3) ? left + W
+                                 : left + W * 0.5f;
+  ay = (py < top + H / 3)       ? top
+       : (py > top + 2 * H / 3)  ? top + H
+                                 : top + H * 0.5f;
+}
+
 void ScaleDrawIfUI(IDirect3DDevice9* dev, UINT firstVertex, UINT vertexCount) {
   const Config& cfg = GetConfig();
   if (!cfg.renderSideScale || cfg.scale == 1.0f || !dev || vertexCount == 0)
@@ -116,12 +126,8 @@ void ScaleDrawIfUI(IDirect3DDevice9* dev, UINT firstVertex, UINT vertexCount) {
   // grow in place on their corner instead of being flung toward one global point.
   const float bcx = (minx + maxx) * 0.5f;
   const float bcy = (miny + maxy) * 0.5f;
-  const float ax = (bcx < left + W / 3)       ? left
-                   : (bcx > left + 2 * W / 3)  ? left + W
-                                              : left + W * 0.5f;
-  const float ay = (bcy < top + H / 3)        ? top
-                   : (bcy > top + 2 * H / 3)   ? top + H
-                                              : top + H * 0.5f;
+  float ax, ay;
+  PickZoneAnchor(bcx, bcy, left, top, W, H, ax, ay);
 
   for (UINT i = 0; i < vertexCount; ++i) {
     float* v = vert(i);

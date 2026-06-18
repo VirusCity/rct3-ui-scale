@@ -43,6 +43,10 @@ void LoadConfig(const std::string& iniPath) {
   // [Scaling] Enabled=1   (render-side proof toggle)
   g_config.renderSideScale =
       GetPrivateProfileIntA("Scaling", "Enabled", 1, iniPath.c_str()) != 0;
+
+  // [Scaling] RemapInput=1   (mouse coordinate remap)
+  g_config.remapInput =
+      GetPrivateProfileIntA("Scaling", "RemapInput", 1, iniPath.c_str()) != 0;
 }
 
 const Config& GetConfig() { return g_config; }

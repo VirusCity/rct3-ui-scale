@@ -33,6 +33,11 @@ struct Config {
   // visual proof-of-concept; it does NOT yet remap mouse input (clicks still
   // land at original positions). Turn off to return to the transparent proxy.
   bool renderSideScale = true;
+
+  // Remap the mouse coordinates the game reads (window messages) by the inverse
+  // UI transform, so clicks land on the scaled elements. Separate toggle so it
+  // can be A/B tested against world-picking behaviour.
+  bool remapInput = true;
 };
 
 // Parse `iniPath` into the process-wide config. Call once at DLL attach.

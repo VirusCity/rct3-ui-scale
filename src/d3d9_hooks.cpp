@@ -8,6 +8,7 @@
 
 #include "MinHook.h"
 #include "frame_inspect.h"
+#include "input_remap.h"
 #include "logging.h"
 #include "ui_scale.h"
 
@@ -236,6 +237,9 @@ HRESULT WINAPI Hook_CreateDevice(IDirect3D9* self, UINT adapter,
         pp ? pp->Windowed : -1, pp ? pp->BackBufferFormat : 0,
         (void*)*ppDevice);
     hooks::InstallOnDevice(*ppDevice);
+    // Subclass the render window (same thread) to remap UI mouse input.
+    HWND wnd = (pp && pp->hDeviceWindow) ? pp->hDeviceWindow : focus;
+    inputremap::Install(wnd);
   } else {
     LOG("CreateDevice FAILED hr=0x%08lX", hr);
   }
