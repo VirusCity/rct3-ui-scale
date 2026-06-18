@@ -152,17 +152,21 @@ void EdgeAnchor(float minx, float miny, float maxx, float maxy, float left,
   const bool dt = (miny <= top + my)      && (maxy <= top + 0.30f * H);
   const bool db = (maxy >= top + H - my)  && (miny >= top + 0.70f * H);
 
-  // Place the free axis by thirds: center when the element sits near the middle,
-  // so a centered bar/column anchors to center instead of being split between
-  // two opposite edge anchors.
+  // Top/bottom strips place their free (X) axis by thirds: the wide, centered
+  // top menu bar lands in the middle third -> center anchor, so it isn't split
+  // between two opposite corners.
   auto third = [](float c, float lo, float span) {
     return (c < lo + span / 3)       ? lo
            : (c > lo + 2 * span / 3) ? lo + span
                                      : lo + span * 0.5f;
   };
 
+  // Left/right strips (the side toolbars) place their free (Y) axis by the HALF
+  // they're in, so a column that lives entirely in one half shares ONE anchor
+  // and scales uniformly. Thirds here would split a column crossing the 2/3 line
+  // (upper icons -> center, lower -> bottom), piling the icons up.
   ax = dl ? left : dr ? (left + W) : (dt || db) ? third(bcx, left, W) : cx;
-  ay = dt ? top : db ? (top + H) : (dl || dr) ? third(bcy, top, H) : cy;
+  ay = dt ? top : db ? (top + H) : (dl || dr) ? (bcy < cy ? top : top + H) : cy;
 }
 
 void ScaleDrawIfUI(IDirect3DDevice9* dev, UINT firstVertex, UINT vertexCount) {
