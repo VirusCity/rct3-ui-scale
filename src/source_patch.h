@@ -1,26 +1,38 @@
 // source_patch.* — in-memory patches to the game's own UI layout, applied at
-// startup. The "secondary strategy" from CLAUDE.md, now under live test.
+// startup. The "secondary strategy" from CLAUDE.md, now the PRIMARY fix.
 //
-// Hypothesis (see research/ghidra_notes.md, "GUI2 scale system"): every GUI2 UI
-// element stores a per-element scale float at `element + 0xF0`, written to 1.0
-// in ~12 element constructors and consumed by the layout that feeds BOTH the
-// renderer and the hit-test. If true, raising that default to our scale enlarges
-// the whole UI *and* keeps clicks aligned natively — the clean fix the render-
-// side hack can't give us.
+// === The working UI-scale lever (see research/ghidra_notes.md) ===
+// RCT3's GUI2 lays the entire UI out on a reference canvas equal to the device
+// resolution, then maps it to screen pixels (scaleX = deviceW / canvasW). That
+// canvas is the `RCTDesktop` rect at `desktop+0x7c..0x88` (L,T,R,B floats), set
+// once at desktop creation by `FUN_007b42d0` to (0,0, deviceW, deviceH).
+// Shrinking the canvas => larger scale => the whole UI is laid out bigger, and
+// because the hit-test reads the SAME canvas, mouse clicks stay aligned. Doing
+// it at creation (before any widget lays out) keeps edge-anchored toolbars on
+// screen. Confirmed live in x32dbg (clicks perfect, anchoring correct).
 //
-// This is an EXPERIMENT: it does not hardcode addresses (CLAUDE.md hard rule).
-// It signature-scans the live RCT3.exe image for the constructor instruction
-//   mov dword ptr [reg + 0xF0], 1.0f   (C7 /0  ModRM  disp32=0xF0  imm32=1.0f)
-// and rewrites the 1.0f immediate to the configured scale. Gated behind
-// [SourcePatch] Enabled and fully logged so the in-game result is unambiguous.
+// We hook `FUN_007b42d0`; right after it builds the desktop we divide the
+// canvas right/bottom by the configured UiScale. Addresses below are specific to
+// this Steam build (image base 0x400000, no ASLR) and come from our own RE.
+//
+// === Dead experiment (kept, gated off) ===
+// `ApplyGui2ScaleDefault` patches the GUI2 element "+0xF0 = 1.0f" ctor writes.
+// That offset turned out to be the AttractionView ride-zoom, not a UI scale, and
+// is re-initialised to 1.0 at runtime — so it does nothing. Left for reference,
+// gated behind [SourcePatch] Enabled (default off).
 #pragma once
 
 namespace sourcepatch {
 
-// Scan the main executable for the GUI2 "+0xF0 = 1.0f" constructor defaults and
-// rewrite the immediate to `scale`. Call ONCE at DLL attach, before any UI
-// element is constructed. No-op (returns 0) when scale == 1.0. Returns the
-// number of sites patched. Safe to call under loader lock (pure memory work).
+// Install the UI-scale hook: detours the RCTDesktop creator and shrinks the GUI2
+// reference canvas by `uiScale` (e.g. 1.25 => UI ~25% larger), so the game lays
+// the whole UI out bigger with correct anchoring + hit-testing. No-op when
+// uiScale <= 1.0. Requires MH_Initialize() to have run. Call once at attach,
+// before the game creates its desktop. Returns true if the hook was installed.
+bool InstallUiScaleHook(float uiScale);
+
+// EXPERIMENT (dead, gated off): rewrite the GUI2 "+0xF0 = 1.0f" ctor defaults to
+// `scale`. Returns the number of sites patched. See header comment.
 int ApplyGui2ScaleDefault(float scale);
 
 }  // namespace sourcepatch

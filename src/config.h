@@ -17,11 +17,11 @@ struct Config {
   // Absolute log-file path. Empty -> default (d3d9_uiscale.log next to the DLL).
   std::string logPath;
 
-  // --- Diagnostics: the built-in frame inspector ---------------------------
+  // --- Diagnostics: the built-in frame inspector (dev tool) ----------------
   // When enabled, pressing `captureKey` dumps the next frame's draw calls (with
   // render state / FVF / transforms) to the log — our in-process substitute for
-  // RenderDoc, which doesn't support D3D9. Turn off for normal play.
-  bool diagnostics = true;
+  // RenderDoc, which doesn't support D3D9. Default OFF; enable via the .ini.
+  bool diagnostics = false;
 
   // Virtual-key code for the frame-capture hotkey. Default 0x7A = VK_F11
   // (F12 is avoided — it's the Steam screenshot key).
@@ -33,12 +33,10 @@ struct Config {
   // Sourced from headless analysis; override here if the build differs.
   unsigned probeRVA = 0x1188100;
 
-  // --- Render-side scaling proof -------------------------------------------
-  // When on, UI draws (fixed-function XYZRHW) have their vertex x/y scaled about
-  // screen center by `scale`, in place, just before the draw. This is the
-  // visual proof-of-concept; it does NOT yet remap mouse input (clicks still
-  // land at original positions). Turn off to return to the transparent proxy.
-  bool renderSideScale = true;
+  // --- Render-side scaling (legacy, superseded by uiScale) -----------------
+  // Visual-only proof-of-concept: scales UI draw vertices in place. Superseded
+  // by the uiScale source hook (which also fixes hit-testing). Default OFF.
+  bool renderSideScale = false;
 
   // Remap the mouse coordinates the game reads (window messages) by the inverse
   // UI transform, so clicks land on the scaled elements. Separate toggle so it
@@ -49,12 +47,18 @@ struct Config {
   // main menu / scenario select, on once in a park. Default 0x79 = F10.
   unsigned toggleKey = 0x79;
 
-  // --- Source patch (experimental, see research/ghidra_notes.md) -----------
-  // When on, at startup we signature-patch the GUI2 element constructors so the
-  // per-element scale at `element + 0xF0` defaults to `scale` instead of 1.0,
-  // i.e. ask the game to lay the UI out bigger itself (fixing render AND clicks
-  // at the source). Independent of renderSideScale — do NOT enable both at once
-  // or the UI is scaled twice. Default off until the experiment is confirmed.
+  // --- UI scale (the real fix: scale the GUI2 reference canvas) -------------
+  // The game lays its whole UI out on a reference canvas = device resolution,
+  // then scales it to pixels. We hook the RCTDesktop creator and shrink that
+  // canvas by `uiScale`, so the game itself lays the UI out larger with correct
+  // anchoring AND hit-testing (see research/ghidra_notes.md). 1.0 = off (stock).
+  // 1.25 = 25% larger, 1.5 = 50%, etc. Clamped to 4.0.
+  float uiScale = 1.0f;
+
+  // --- Source patch (DEAD experiment, see research/ghidra_notes.md) --------
+  // Signature-patches the GUI2 element "+0xF0 = 1.0f" ctor writes. That offset
+  // is the AttractionView ride-zoom, not a UI scale, and is reset at runtime —
+  // so it does nothing. Kept for reference, default off.
   bool sourcePatch = false;
 };
 

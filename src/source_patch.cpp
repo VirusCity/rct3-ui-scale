@@ -4,10 +4,64 @@
 
 #include <cstdint>
 
+#include "MinHook.h"
 #include "logging.h"
 
 namespace sourcepatch {
 namespace {
+
+// --- UI-scale lever: the GUI2 reference canvas (RCTDesktop) -----------------
+// Addresses for THIS Steam build (RCT3.exe, image base 0x400000, no ASLR), from
+// our own reverse engineering (research/ghidra_notes.md):
+//   FUN_00a24a70  = the RCTDesktop creator used in normal play (alloc + ctor +
+//                   set canvas rect). FUN_007b42d0 is an identical alternate
+//                   path; we hook both — only one runs (singleton-guarded).
+//   0x012e4fa4    = global RCTDesktop* (the singleton "s_desktop").
+//   desktop+0x7c  = canvas rect as 4 floats: [0]=left [1]=top [2]=right [3]=bottom.
+constexpr uintptr_t kCreateDesktopMain = 0x00a24a70;  // real path (confirmed live)
+constexpr uintptr_t kCreateDesktopAlt = 0x007b42d0;   // identical twin path
+constexpr uintptr_t kDesktopGlobalPtr = 0x012e4fa4;
+constexpr unsigned kCanvasRectOff = 0x7c;
+
+using CreateDesktopFn = void(__cdecl*)();
+CreateDesktopFn g_origCreateMain = nullptr;
+CreateDesktopFn g_origCreateAlt = nullptr;
+float g_uiScale = 1.0f;
+
+// After the game builds the RCTDesktop (canvas = full device resolution), shrink
+// the canvas by g_uiScale. A smaller canvas mapped to the same device => the
+// whole UI is laid out larger; the hit-test reads the same canvas so clicks
+// stay aligned. Done right after creation (before the toolbars/panels lay out)
+// so edge-anchored elements reposition correctly instead of overflowing.
+void ScaleDesktopCanvas(const char* via) {
+  uintptr_t desktop = *reinterpret_cast<uintptr_t*>(kDesktopGlobalPtr);
+  if (!desktop) {
+    LOG("uiscale[desktop]: %s ran but s_desktop is null — not scaling.", via);
+    return;
+  }
+  float* rect = reinterpret_cast<float*>(desktop + kCanvasRectOff);
+  const float w = rect[2] - rect[0];
+  const float h = rect[3] - rect[1];
+  // Sanity: only touch a plausible pixel canvas, so a wrong address can't corrupt.
+  if (!(w > 64.0f && w < 32768.0f && h > 64.0f && h < 32768.0f)) {
+    LOG("uiscale[desktop]: canvas %.1fx%.1f implausible — skipping (wrong build?).", w, h);
+    return;
+  }
+  rect[2] = rect[0] + w / g_uiScale;
+  rect[3] = rect[1] + h / g_uiScale;
+  LOG("uiscale[desktop]: (%s) canvas %.0fx%.0f -> %.0fx%.0f (UiScale=%.3f); UI will "
+      "lay out %.2fx larger.",
+      via, w, h, rect[2] - rect[0], rect[3] - rect[1], g_uiScale, g_uiScale);
+}
+
+void __cdecl DetourCreateMain() {
+  g_origCreateMain();
+  ScaleDesktopCanvas("FUN_00a24a70");
+}
+void __cdecl DetourCreateAlt() {
+  g_origCreateAlt();
+  ScaleDesktopCanvas("FUN_007b42d0");
+}
 
 // One decoded candidate: a `mov dword ptr [reg+0xF0], 1.0f` instruction.
 // `immAddr` points at the 4-byte imm32 we rewrite; `mov` is the opcode start.
@@ -48,6 +102,40 @@ bool WriteImm32(uint8_t* at, uint32_t value) {
 }
 
 }  // namespace
+
+namespace {
+// Create + enable one creator hook. Returns true on success.
+bool ArmCreatorHook(uintptr_t addr, void* detour, void** orig) {
+  void* target = reinterpret_cast<void*>(addr);
+  if (MH_CreateHook(target, detour, orig) != MH_OK) {
+    LOG("uiscale[desktop]: MH_CreateHook(0x%IX) failed.", addr);
+    return false;
+  }
+  if (MH_EnableHook(target) != MH_OK) {
+    LOG("uiscale[desktop]: MH_EnableHook(0x%IX) failed.", addr);
+    return false;
+  }
+  return true;
+}
+}  // namespace
+
+bool InstallUiScaleHook(float uiScale) {
+  if (uiScale <= 1.0f) {
+    LOG("uiscale[desktop]: UiScale=%.3f (<= 1.0) — disabled.", uiScale);
+    return false;
+  }
+  if (uiScale > 4.0f) uiScale = 4.0f;  // clamp; beyond this the UI is unusable
+  g_uiScale = uiScale;
+
+  bool a = ArmCreatorHook(kCreateDesktopMain, reinterpret_cast<void*>(&DetourCreateMain),
+                          reinterpret_cast<void**>(&g_origCreateMain));
+  bool b = ArmCreatorHook(kCreateDesktopAlt, reinterpret_cast<void*>(&DetourCreateAlt),
+                          reinterpret_cast<void**>(&g_origCreateAlt));
+  LOG("uiscale[desktop]: hooks armed (main=%d alt=%d) on RCTDesktop creators, "
+      "UiScale=%.3f.",
+      a ? 1 : 0, b ? 1 : 0, uiScale);
+  return a || b;
+}
 
 int ApplyGui2ScaleDefault(float scale) {
   if (scale == 1.0f) {

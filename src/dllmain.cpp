@@ -61,10 +61,14 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID /*reserved*/) {
         return TRUE;  // stay loaded so exports still forward where possible.
       }
 
-      if (MH_Initialize() != MH_OK)
+      if (MH_Initialize() != MH_OK) {
         LOG("dllmain: MH_Initialize failed — device hooks will not install.");
-      else
+      } else {
         LOG("dllmain: MinHook initialised. Awaiting Direct3DCreate9.");
+        // Install the UI-scale hook now (before the game builds its GUI2
+        // desktop) so the whole UI lays out at the configured scale.
+        sourcepatch::InstallUiScaleHook(cfg.uiScale);
+      }
       break;
     }
 
