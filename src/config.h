@@ -55,6 +55,13 @@ struct Config {
   // 1.25 = 25% larger, 1.5 = 50%, etc. Clamped to 4.0.
   float uiScale = 1.0f;
 
+  // --- Display: borderless-windowed mode -----------------------------------
+  // When on, the D3D9 device is forced windowed at desktop resolution and the
+  // game window is stripped of its border and sized to cover the monitor —
+  // "borderless fullscreen". RCT3 itself only offers windowed or exclusive
+  // fullscreen. Default off.
+  bool borderless = false;
+
   // --- Source patch (DEAD experiment, see research/ghidra_notes.md) --------
   // Signature-patches the GUI2 element "+0xF0 = 1.0f" ctor writes. That offset
   // is the AttractionView ride-zoom, not a UI scale, and is reset at runtime —

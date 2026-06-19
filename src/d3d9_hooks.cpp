@@ -7,6 +7,7 @@
 #include <string>
 
 #include "MinHook.h"
+#include "borderless.h"
 #include "frame_inspect.h"
 #include "input_remap.h"
 #include "logging.h"
@@ -150,6 +151,7 @@ HRESULT WINAPI Hook_Present(IDirect3DDevice9* dev, const RECT* src,
                             const RECT* dst, HWND wnd, const RGNDATA* dirty) {
   frameinspect::OnFrameBoundary(dev);
   uiscale::OnPresent(dev);
+  borderless::Tick();  // re-assert the borderless window if the game changed it
   return o_Present(dev, src, dst, wnd, dirty);
 }
 
@@ -219,8 +221,10 @@ HRESULT WINAPI Hook_EndScene(IDirect3DDevice9* dev) {
 
 HRESULT WINAPI Hook_Reset(IDirect3DDevice9* dev, D3DPRESENT_PARAMETERS* pp) {
   uiscale::OnPreReset(dev);
+  borderless::PrepareParams(pp, nullptr);  // keep borderless across mode/res changes
   HRESULT hr = o_Reset(dev, pp);
   uiscale::OnPostReset(dev, pp);
+  if (SUCCEEDED(hr)) borderless::ApplyWindow(nullptr);
   return hr;
 }
 
@@ -230,6 +234,10 @@ HRESULT WINAPI Hook_CreateDevice(IDirect3D9* self, UINT adapter,
                                  D3DDEVTYPE type, HWND focus, DWORD flags,
                                  D3DPRESENT_PARAMETERS* pp,
                                  IDirect3DDevice9** ppDevice) {
+  HWND wnd = (pp && pp->hDeviceWindow) ? pp->hDeviceWindow : focus;
+  // Force the device windowed at desktop size BEFORE creation if borderless is on.
+  borderless::PrepareParams(pp, wnd);
+
   HRESULT hr = o_CreateDevice(self, adapter, type, focus, flags, pp, ppDevice);
   if (SUCCEEDED(hr) && ppDevice && *ppDevice) {
     LOG("CreateDevice OK: %ux%u windowed=%d fmt=%d  device=%p",
@@ -237,8 +245,8 @@ HRESULT WINAPI Hook_CreateDevice(IDirect3D9* self, UINT adapter,
         pp ? pp->Windowed : -1, pp ? pp->BackBufferFormat : 0,
         (void*)*ppDevice);
     hooks::InstallOnDevice(*ppDevice);
+    borderless::ApplyWindow(wnd);  // strip chrome + cover the monitor
     // Subclass the render window (same thread) to remap UI mouse input.
-    HWND wnd = (pp && pp->hDeviceWindow) ? pp->hDeviceWindow : focus;
     inputremap::Install(wnd);
   } else {
     LOG("CreateDevice FAILED hr=0x%08lX", hr);

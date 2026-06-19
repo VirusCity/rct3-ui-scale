@@ -64,6 +64,10 @@ void LoadConfig(const std::string& iniPath) {
   float us = static_cast<float>(atof(usStr.c_str()));
   if (us >= 1.0f && us <= 4.0f) g_config.uiScale = us;
 
+  // [Display] Borderless=0   (borderless-windowed mode)
+  g_config.borderless =
+      GetPrivateProfileIntA("Display", "Borderless", 0, iniPath.c_str()) != 0;
+
   // [SourcePatch] Enabled=0   (experimental GUI2 +0xF0 default-scale patch)
   g_config.sourcePatch =
       GetPrivateProfileIntA("SourcePatch", "Enabled", 0, iniPath.c_str()) != 0;
