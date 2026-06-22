@@ -17,6 +17,7 @@
 /d3d9_uiscale.ini
 
 # IDE / OS cruft
+*.lnk
 .vs/
 .vscode/
 .claude/settings.local.json
