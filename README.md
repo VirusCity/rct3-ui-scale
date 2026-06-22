@@ -35,6 +35,16 @@ hit-tests against the same canvas, both visuals and clicks scale together. See
 [research/ui_pass_findings.md](research/ui_pass_findings.md) for the frame analysis
 that led here.
 
+### Why not a render-side hook? (explored and abandoned)
+The obvious approach — hook the D3D9 draw calls and scale the UI quads in flight —
+**was tried first and abandoned.** The frame inspector showed the UI is drawn with
+fixed-function, pre-transformed (`XYZRHW`) vertices, so they *can* be rewritten to
+look bigger, but two problems make it unusable: (1) it does **not** fix the game's
+hit-testing — clicks still land on the original tiny buttons; and (2) a uniform
+vertex scale can't honour per-element edge anchoring, since the hook only sees final
+pixels. The source patch above sidesteps both because the game itself lays the UI out
+larger. The abandoned render-side code is kept in `src/ui_scale.*` for reference.
+
 ## Install (for players)
 1. Download `d3d9.dll` and `d3d9_uiscale.ini` (build them, or grab a release).
 2. Copy both next to the game executable — the folder containing `RCT3.exe`.

@@ -2,11 +2,14 @@
 // (d3d9_hooks.*). The hook detours call into these notification points; all
 // decisions about WHAT to scale and HOW live here.
 //
-// Status: MILESTONE 1 — no geometry is altered. These entry points currently
-// only count frames / log device lifecycle so we can confirm the hook chain is
-// live and the game renders identically to stock. The actual UI-pass detection
-// and scale transform are gated on the user's RenderDoc findings
-// (research/renderdoc_findings.md) — see ui_scale.cpp for the marked TODO.
+// Status: EXPLORED AND ABANDONED. This render-side path scales the UI by
+// rewriting the XYZRHW vertices of the UI draws in flight. It is kept for
+// reference but is NOT the shipped fix: per the frame analysis in
+// research/ui_pass_findings.md it cannot fix the game's hit-testing (clicks
+// still land on the original tiny buttons) and a uniform vertex scale can't
+// honour per-element edge anchoring. The shipped fix is the source patch in
+// source_patch.* (shrinks the GUI2 reference canvas so the game lays the UI
+// out larger itself). See ui_scale.cpp for details.
 #pragma once
 
 #include <d3d9.h>

@@ -143,9 +143,11 @@ void* VtblEntry(void* comObject, int index) {
 }
 
 // ---- Device-method detours -------------------------------------------------
-// Milestone 1: these are transparent — they only notify ui_scale (counters /
-// logging) and forward. No geometry is altered yet. This lets us verify the
-// whole proxy+hook chain renders identically to stock before any scaling.
+// These detours are transparent: they notify ui_scale (counters / logging) and
+// the frame inspector, then forward. The shipped UI scaling is NOT done here —
+// it's the source patch in source_patch.* (the render-side scaling in ui_scale.*
+// was explored and abandoned; see research/ui_pass_findings.md). Keeping these
+// detours thin lets the proxy+hook chain render identically to stock.
 
 HRESULT WINAPI Hook_Present(IDirect3DDevice9* dev, const RECT* src,
                             const RECT* dst, HWND wnd, const RGNDATA* dirty) {
