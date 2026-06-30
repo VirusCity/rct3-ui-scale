@@ -67,6 +67,33 @@ struct Config {
   // is the AttractionView ride-zoom, not a UI scale, and is reset at runtime —
   // so it does nothing. Kept for reference, default off.
   bool sourcePatch = false;
+
+  // --- [Signatures]: manual lever overrides (ADVANCED; for porting) --------
+  // For users on a non-Steam / non-Complete edition where the built-in
+  // signatures don't resolve. ALL default to "unset" (0 / empty / -1), in which
+  // case resolution falls through to the built-in signatures and then the baked
+  // Steam fallback — i.e. the stock RCT3 Complete user is wholly unaffected.
+  //
+  // Per-value priority: INI RVA > INI signature > built-in signature > fallback.
+  //
+  // Option B — raw RVAs (exe-relative; image base subtracted). Most robust:
+  unsigned ovrCreateMainRVA = 0;     // RCTDesktop creator (normal-play path)
+  unsigned ovrCreateAltRVA = 0;      // identical twin creator
+  unsigned ovrDesktopGlobalRVA = 0;  // s_desktop singleton pointer
+  unsigned ovrCanvasRectOff = 0;     // canvas-rect struct offset (0 => default 0x7C)
+  // Option A — AOB signatures (scanned; same syntax as sigscan.h). An empty
+  // string keeps the built-in pattern; a negative offset keeps the built-in one.
+  std::string sigAltGuard;
+  int sigAltGuardGlobalOff = -1;     // disp32 offset of s_desktop within AltGuardSig
+  std::string sigCreatorStore;
+  int sigCreatorStoreGlobalOff = -1; // disp32 offset of the store target
+  std::string sigPrologue;
+
+  // [Diagnostics] DiscoverSignatures — read-only porting aid (default OFF). When
+  // on, the mod scans for all lever-site candidates, validates the s_desktop
+  // global + canvas offset against the live display resolution, and logs a
+  // ready-to-paste [Signatures] block. No effect on scaling; pure reporting.
+  bool discoverSignatures = false;
 };
 
 // Parse `iniPath` into the process-wide config. Call once at DLL attach.

@@ -24,12 +24,21 @@ void LoadConfig(const std::string& iniPath) {
   if (parsed > 0.1f && parsed < 10.0f)  // sanity clamp; ignore garbage.
     g_config.scale = parsed;
 
-  // [General] LoggingEnabled=1
+  // [Diagnostics] LoggingEnabled=1  (moved here from [General]). For backward
+  // compatibility with already-deployed .ini files we read the old [General]
+  // location first and use it as the default, so an existing LoggingEnabled
+  // setting keeps working even if the file hasn't been updated.
+  int legacyLog =
+      GetPrivateProfileIntA("General", "LoggingEnabled", 1, iniPath.c_str());
   g_config.logEnabled =
-      GetPrivateProfileIntA("General", "LoggingEnabled", 1, iniPath.c_str()) != 0;
+      GetPrivateProfileIntA("Diagnostics", "LoggingEnabled", legacyLog,
+                            iniPath.c_str()) != 0;
 
-  // [Advanced] LogFile=  (optional override; blank => default path)
-  g_config.logPath = ReadString("Advanced", "LogFile", "", iniPath);
+  // [Diagnostics] LogPath=  (renamed from [Advanced] LogFile; blank => default
+  // path). Same backward-compat fallback to the old [Advanced] LogFile key.
+  std::string legacyPath = ReadString("Advanced", "LogFile", "", iniPath);
+  g_config.logPath =
+      ReadString("Diagnostics", "LogPath", legacyPath.c_str(), iniPath);
 
   // [Diagnostics] Enabled — the frame inspector is a dev tool; default OFF (the
   // shipping ini omits this key). Add [Diagnostics] Enabled=1 to turn it on.
@@ -71,6 +80,33 @@ void LoadConfig(const std::string& iniPath) {
   // [SourcePatch] Enabled=0   (experimental GUI2 +0xF0 default-scale patch)
   g_config.sourcePatch =
       GetPrivateProfileIntA("SourcePatch", "Enabled", 0, iniPath.c_str()) != 0;
+
+  // [Diagnostics] DiscoverSignatures=0   (porting aid; read-only, default off)
+  g_config.discoverSignatures =
+      GetPrivateProfileIntA("Diagnostics", "DiscoverSignatures", 0,
+                            iniPath.c_str()) != 0;
+
+  // [Signatures] — manual lever overrides for porting to other editions. Every
+  // key defaults to "unset"; a stock install has no such section and is
+  // unaffected. Blank string => 0 (RVA) / unset (signature); see config.h.
+  auto readRva = [&](const char* key) -> unsigned {
+    std::string s = ReadString("Signatures", key, "", iniPath);
+    return s.empty() ? 0u
+                     : static_cast<unsigned>(strtoul(s.c_str(), nullptr, 0));
+  };
+  auto readOff = [&](const char* key) -> int {
+    std::string s = ReadString("Signatures", key, "", iniPath);
+    return s.empty() ? -1 : static_cast<int>(strtol(s.c_str(), nullptr, 0));
+  };
+  g_config.ovrCreateMainRVA = readRva("CreateMainRVA");
+  g_config.ovrCreateAltRVA = readRva("CreateAltRVA");
+  g_config.ovrDesktopGlobalRVA = readRva("DesktopGlobalRVA");
+  g_config.ovrCanvasRectOff = readRva("CanvasRectOffset");
+  g_config.sigAltGuard = ReadString("Signatures", "AltGuardSig", "", iniPath);
+  g_config.sigAltGuardGlobalOff = readOff("AltGuardGlobalOff");
+  g_config.sigCreatorStore = ReadString("Signatures", "CreatorStoreSig", "", iniPath);
+  g_config.sigCreatorStoreGlobalOff = readOff("CreatorStoreGlobalOff");
+  g_config.sigPrologue = ReadString("Signatures", "PrologueSig", "", iniPath);
 }
 
 const Config& GetConfig() { return g_config; }

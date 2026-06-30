@@ -11,6 +11,7 @@
 #include "frame_inspect.h"
 #include "input_remap.h"
 #include "logging.h"
+#include "source_patch.h"
 #include "ui_scale.h"
 
 // The verbatim export forwarders live in d3d9_proxy_exports.cpp (a TU without
@@ -154,6 +155,20 @@ HRESULT WINAPI Hook_Present(IDirect3DDevice9* dev, const RECT* src,
   frameinspect::OnFrameBoundary(dev);
   uiscale::OnPresent(dev);
   borderless::Tick();  // re-assert the borderless window if the game changed it
+  // Signature-discovery porting aid: only when enabled (and unfinished). We read
+  // the live back-buffer size so discovery can match it against a candidate
+  // canvas. DiscoveryActive() is a cheap gate that goes false once it completes,
+  // so this costs nothing on a normal (discovery-off) run.
+  if (sourcepatch::DiscoveryActive()) {
+    IDirect3DSurface9* bb = nullptr;
+    if (SUCCEEDED(dev->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &bb)) && bb) {
+      D3DSURFACE_DESC d;
+      if (SUCCEEDED(bb->GetDesc(&d)))
+        sourcepatch::DiscoverProbe(static_cast<int>(d.Width),
+                                   static_cast<int>(d.Height));
+      bb->Release();
+    }
+  }
   return o_Present(dev, src, dst, wnd, dirty);
 }
 
