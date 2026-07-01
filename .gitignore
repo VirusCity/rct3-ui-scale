@@ -16,6 +16,9 @@
 /d3d9.dll
 /d3d9_uiscale.ini
 
+# Packaged release artifacts (staged locally, uploaded to GitHub Releases)
+/dist/
+
 # IDE / OS cruft
 *.lnk
 .vs/
