@@ -77,7 +77,8 @@ optional and documented inline. Key ones:
 |-----|---------|---------|
 | `[Scaling] UiScale`     | `1.25` | UI size multiplier. `1.0` = stock. ~`1.15`–`1.5` is comfortable at 1440p/4K. |
 | `[Display] Borderless`  | `0`    | `1` = borderless-windowed at desktop resolution. |
-| `[General] LoggingEnabled` | `1` | Write a timestamped `d3d9_uiscale.log` next to the DLL. |
+| `[Diagnostics] LoggingEnabled` | `1` | Write a timestamped `d3d9_uiscale.log` next to the DLL. |
+| `[Diagnostics] DiscoverSignatures` | `0` | Porting aid: log a ready-to-paste `[Signatures]` block for non-Steam editions (see below). |
 
 ## Layout
 | Path | Purpose |
@@ -100,7 +101,12 @@ optional and documented inline. Key ones:
 
 ## Compatibility & caveats
 - Only verified against **RCT3: Complete Edition, Steam build (App ID 1368820)**,
-  32-bit. Other builds will likely need their signatures re-derived.
+  32-bit. Other editions may need their signatures re-derived. Before reaching for
+  a debugger, try `[Diagnostics] DiscoverSignatures=1`: the mod scans the running
+  game, validates the UI canvas against your display, and logs a ready-to-paste
+  `[Signatures]` block. Paste it into the `.ini` (`[Signatures]`), set
+  `DiscoverSignatures=0`, and restart. A debugger is only needed if discovery
+  reports that the structural patterns don't fit the build at all.
 - At high `UiScale` values some edge-docked toolbars can extend past the screen edge;
   lower the value if that happens.
 - The Steam in-game overlay also hooks D3D9. The proxy forwards exports cleanly to

@@ -35,4 +35,16 @@ bool InstallUiScaleHook(float uiScale);
 // `scale`. Returns the number of sites patched. See header comment.
 int ApplyGui2ScaleDefault(float scale);
 
+// --- [Diagnostics] DiscoverSignatures: read-only porting aid ---------------
+// True while signature discovery is enabled AND not yet finished. A cheap config
+// + bool check; once discovery reports (or gives up) it returns false so the
+// per-frame probe below stops being called. Default-off, so stock builds skip it.
+bool DiscoveryActive();
+
+// Per-frame probe (call from Present when DiscoveryActive()). Behaviorally
+// locates the real s_desktop global + canvas offset by matching a candidate
+// object's canvas rect against the live `devW`x`devH` back-buffer, then logs a
+// ready-to-paste [Signatures] block. Read-only; self-limits to run once.
+void DiscoverProbe(int devW, int devH);
+
 }  // namespace sourcepatch
