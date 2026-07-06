@@ -1,121 +1,76 @@
 # RCT3 UI Scale
 
-A Direct3D 9 proxy/hook DLL that makes **RollerCoaster Tycoon 3's UI bigger** so it
-stays usable at 1440p, 4K, and beyond. The stock game lays its UI out at a fixed
-pixel size with no scaling option, so toolbars, windows and fonts shrink as
-resolution rises. This mod fixes that — and as a bonus adds a borderless-windowed
-display mode.
+Fixes the tiny UI in *RollerCoaster Tycoon 3* on modern high-resolution
+displays. Drop two files next to the game and the interface renders at a
+usable size — **2× at 4K, ~1.33× at 1440p, native at 1080p** — with mouse
+input staying perfectly aligned. Optional borderless-windowed mode lets the
+game render at your monitor's full resolution, above its built-in 1080p cap.
 
-Targets **RCT3: Complete Edition, Steam (App ID 1368820)**, 32-bit (x86). See
-[CLAUDE.md](CLAUDE.md) for the full design notes and reverse-engineering rules.
+No per-version hacks: the mod discovers the game's UI canvas at runtime, so
+one DLL works across editions. Confirmed scaling **on first launch** on:
 
-> ⚠️ **Build-specific.** Every memory address and byte signature in this mod was
-> reverse-engineered from this exact Steam build. It is **not** expected to work on
-> the Platinum/GOG editions or other releases without re-deriving those signatures.
+| Edition | Executable |
+| --- | --- |
+| Complete Edition (Steam) | `RCT3.exe` |
+| Platinum / Gold | `RCT3plus.exe` |
+| Original 2004 demo | `RCT3.exe` |
 
-## Features
-- **UI scaling** (`UiScale`) — enlarges the entire UI: toolbars, windows, and fonts.
-  Rather than scaling pixels after the fact, it shrinks the game's internal UI
-  reference canvas so the game *itself* lays the UI out larger. That keeps
-  edge-anchoring correct **and** keeps mouse hit-testing aligned — clicks land
-  exactly where the larger buttons are drawn.
-- **Borderless-windowed mode** (`Borderless`) — strips the window border and sizes
-  the window to cover the monitor, rendering at desktop resolution. RCT3 itself only
-  offers windowed or exclusive fullscreen.
-- **Transparent D3D9 proxy** — forwards every real `d3d9.dll` export, coexists with
-  the Steam overlay, and renders identically to stock when scaling is set to 1.0.
-- **In-process frame inspector** — a textual substitute for RenderDoc (which dropped
-  D3D9 support); used during development to analyse the UI render pass.
+Other builds (retail, GOG, community-patched, widescreen-fixed) are expected
+to work the same way — the discovery is version-agnostic by design. If one
+doesn't, see Troubleshooting.
 
-## How the scaling works
-RCT3's GUI2 system lays the entire UI out on an internal reference canvas, then maps
-that canvas onto the display. The mod locates that canvas by byte-signature scan (no
-hardcoded addresses) and shrinks it by `UiScale`. Because the game draws and
-hit-tests against the same canvas, both visuals and clicks scale together. See
-[research/ui_pass_findings.md](research/ui_pass_findings.md) for the frame analysis
-that led here.
+## Install
 
-### Why not a render-side hook? (explored and abandoned)
-The obvious approach — hook the D3D9 draw calls and scale the UI quads in flight —
-**was tried first and abandoned.** The frame inspector showed the UI is drawn with
-fixed-function, pre-transformed (`XYZRHW`) vertices, so they *can* be rewritten to
-look bigger, but two problems make it unusable: (1) it does **not** fix the game's
-hit-testing — clicks still land on the original tiny buttons; and (2) a uniform
-vertex scale can't honour per-element edge anchoring, since the hook only sees final
-pixels. The source patch above sidesteps both because the game itself lays the UI out
-larger. The abandoned render-side code is kept in `src/ui_scale.*` for reference.
+1. Download the latest release zip.
+2. Copy `d3d9.dll` and `d3d9_uiscale.ini` into the game folder, next to
+   `RCT3.exe` (or `RCT3plus.exe`).
+3. Play. The mod calibrates itself on the first launch — no setup.
 
-## Install (for players)
-1. Download `d3d9.dll` and `d3d9_uiscale.ini` (build them, or grab a release).
-2. Copy both next to the game executable — the folder containing `RCT3.exe`.
-3. Edit `d3d9_uiscale.ini`: set `UiScale` (e.g. `1.25`) and optionally `Borderless=1`.
-4. Launch the game.
+To uninstall, delete the two files (plus `d3d9_uiscale.cache` if present).
 
-To uninstall, delete `d3d9.dll` (and the `.ini`/`.log`) from the game folder.
+## Configuration (`d3d9_uiscale.ini`)
 
-If launch crashes or shows a black screen, suspect Steam-overlay interaction — set
-`LoggingEnabled=1` and check the `d3d9_uiscale.log` that appears next to the DLL.
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `[Master] Enabled` | `1` | Master switch for the whole mod. |
+| `[Features] Scale` | `0` | `0` = automatic (1× at 1080p → 2× at 4K). Any other value is an explicit uniform multiplier, e.g. `1.5`. |
+| `[Features] Borderless` | `1` | Borderless window at your monitor's native resolution (lets the game render above its 1080p cap). |
+| `[Debug] Cache / Logging / Verbose` | `1 / 0 / 0` | Diagnostics — leave alone unless advised. |
 
-## Build (Win32 / x86 only)
-Requires Visual Studio 2026 with the Desktop C++ workload (MSVC x86 + Windows SDK +
-CMake). From the repo root:
+## How it works (short version)
 
-```sh
+The game lays its UI out against a canvas whose size the engine divides into
+the screen resolution. The mod finds that canvas **at runtime, by data flow**
+— no hardcoded addresses, no per-version signatures for data — hooks the
+function that creates it, and shrinks it *before the UI lays out*, so the
+engine's own math magnifies rendering and mouse hit-testing together. Every
+patch is validated against the live backbuffer, fully reversible, and cached
+per-executable (a game update just triggers a fresh self-calibration).
+
+Details: [src/README.md](src/README.md).
+
+## Troubleshooting
+
+- **UI didn't scale?** Set `Logging=1` under `[Debug]`, relaunch, load into a
+  park, quit, and open an issue with the `d3d9_uiscale.log` from the game
+  folder. The log records exactly what was searched and why.
+- **Weird state after a crash or game update?** Delete `d3d9_uiscale.cache`
+  next to the exe — the mod recalibrates on the next launch. (It also detects
+  both situations itself; this is just the manual override.)
+
+## Building from source
+
+Requirements: Visual Studio 2026 (or any MSVC toolchain CMake can drive) —
+the game is 32-bit, so the Win32 preset is mandatory.
+
+```
 cmake --preset vs2026-x86
-cmake --build --preset vs2026-x86-release
+cmake --build build --config Release
 ```
 
-Output: `build/Release/d3d9.dll` (32-bit), also copied to the repo root for
-convenience. The build **fails configuration** if it isn't targeting x86 — a 64-bit
-DLL cannot load into the 32-bit game.
-
-## Configuration
-All keys live in [`config/d3d9_uiscale.ini`](config/d3d9_uiscale.ini); each is
-optional and documented inline. Key ones:
-
-| Key | Default | Meaning |
-|-----|---------|---------|
-| `[Scaling] UiScale`     | `1.25` | UI size multiplier. `1.0` = stock. ~`1.15`–`1.5` is comfortable at 1440p/4K. |
-| `[Display] Borderless`  | `0`    | `1` = borderless-windowed at desktop resolution. |
-| `[Diagnostics] LoggingEnabled` | `1` | Write a timestamped `d3d9_uiscale.log` next to the DLL. |
-| `[Diagnostics] DiscoverSignatures` | `0` | Porting aid: log a ready-to-paste `[Signatures]` block for non-Steam editions (see below). |
-
-## Layout
-| Path | Purpose |
-|------|---------|
-| `src/dllmain.cpp`     | Entry point, one-time wiring |
-| `src/d3d9_hooks.*` / `src/d3d9_proxy_exports.*` | Proxy/export forwarding + MinHook device hooks |
-| `src/source_patch.*`  | The UI-scale patch (shrinks the GUI2 reference canvas) |
-| `src/sigscan.*`       | Byte-signature scanner that resolves the patch targets |
-| `src/borderless.*`    | Borderless-windowed display mode |
-| `src/ui_scale.*`      | Render-side scaling experiment (superseded by the source patch) |
-| `src/frame_inspect.*` | In-process frame capture (RenderDoc substitute) |
-| `src/input_remap.*`   | Mouse-coordinate remapping helpers |
-| `src/config.*`        | `.ini` reader |
-| `src/logging.*`       | Timestamped log |
-| `src/d3d9.def`        | Export table (names + ordinals from the real DLL) |
-| `config/`             | User-editable `.ini` |
-| `research/`           | Frame-inspector findings (Ghidra notes stay local/gitignored) |
-| `third_party/minhook` | Vendored MinHook (x86), under its own zlib license |
-| `tools/ghidra`        | Helper scripts used during reverse engineering |
-
-## Compatibility & caveats
-- Only verified against **RCT3: Complete Edition, Steam build (App ID 1368820)**,
-  32-bit. Other editions may need their signatures re-derived. Before reaching for
-  a debugger, try `[Diagnostics] DiscoverSignatures=1`: the mod scans the running
-  game, validates the UI canvas against your display, and logs a ready-to-paste
-  `[Signatures]` block. Paste it into the `.ini` (`[Signatures]`), set
-  `DiscoverSignatures=0`, and restart. A debugger is only needed if discovery
-  reports that the structural patterns don't fit the build at all.
-- At high `UiScale` values some edge-docked toolbars can extend past the screen edge;
-  lower the value if that happens.
-- The Steam in-game overlay also hooks D3D9. The proxy forwards exports cleanly to
-  coexist, but report any overlay-related crashes with a log.
+The DLL lands in `build/Release/d3d9.dll`.
 
 ## License
-[MIT](LICENSE). Vendored MinHook (`third_party/minhook`) is distributed under its own
-zlib license — see `third_party/minhook/LICENSE.txt`.
 
-This is an unofficial fan-made modification. RollerCoaster Tycoon 3 is a trademark of
-its respective owners; this project is not affiliated with or endorsed by them, and
-ships no game code or assets.
+MIT — see [LICENSE](LICENSE). MinHook (vendored under `third_party/`) is
+BSD-2, see its bundled license.

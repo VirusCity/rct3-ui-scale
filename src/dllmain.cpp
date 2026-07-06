@@ -1,84 +1,76 @@
-// dllmain.cpp — entry point and one-time wiring.
+// dllmain.cpp — entry point and one-time wiring (src-v2).
 //
-// Load order: Windows loads this d3d9.dll (sitting next to the game exe) before
-// the system one. On attach we: read config, open the log, load+resolve the
-// real d3d9.dll, and initialise MinHook. The actual device hooks are installed
-// lazily when the game calls our wrapped Direct3DCreate9 (see d3d9_hooks.cpp).
+// Load order: Windows loads this d3d9.dll (next to the game exe) before the
+// system one. On attach we ONLY: read config, open the log, init MinHook,
+// load+resolve the real d3d9.dll, wire the selector to the backbuffer gate,
+// and arm the TIMING hooks (signature-located creator hooks — timing only,
+// they patch nothing by themselves).
+//
+// Crucially, no memory is scaled here. A shrink happens exclusively inside a
+// creator detour, after passive discovery has validated a canvas mapping
+// against a live backbuffer (correct hook + correct discovery, or nothing).
 
 #include <windows.h>
 
 #include <string>
 
-#include "MinHook.h"
-#include "config.h"
-#include "d3d9_hooks.h"
-#include "input_remap.h"
-#include "logging.h"
-#include "source_patch.h"
+#include "core/config.h"
+#include "core/log.h"
+#include "core/patch.h"
+#include "device/backbuffer_gate.h"
+#include "proxy.h"
+#include "selector.h"
 
 namespace {
 
-// Directory containing this DLL (i.e. the game folder), for locating the .ini
-// and log file. Returns with a trailing backslash stripped.
 std::string ModuleDir(HMODULE self) {
   char path[MAX_PATH];
-  DWORD n = GetModuleFileNameA(self, path, MAX_PATH);
+  const DWORD n = GetModuleFileNameA(self, path, MAX_PATH);
   std::string s(path, n);
-  size_t slash = s.find_last_of("\\/");
+  const size_t slash = s.find_last_of("\\/");
   return slash == std::string::npos ? std::string(".") : s.substr(0, slash);
 }
 
 }  // namespace
 
-BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID /*reserved*/) {
+BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID) {
   switch (reason) {
     case DLL_PROCESS_ATTACH: {
       DisableThreadLibraryCalls(inst);
 
       const std::string dir = ModuleDir(inst);
-      LoadConfig(dir + "\\d3d9_uiscale.ini");
-
+      LoadConfig((dir + "\\d3d9_uiscale.ini").c_str());
       const Config& cfg = GetConfig();
-      const std::string logPath =
-          cfg.logPath.empty() ? dir + "\\d3d9_uiscale.log" : cfg.logPath;
-      logger::Init(cfg.logEnabled, logPath);
-      LOG("dllmain: attach. dir=%s scale=%.3f logging=%d", dir.c_str(),
-          cfg.scale, cfg.logEnabled ? 1 : 0);
 
-      // Experimental source patch: raise the GUI2 per-element default scale at
-      // its source. Must run before the game constructs any UI element, so we do
-      // it here at attach (the exe is mapped; no UI exists yet). Independent of
-      // the D3D proxy/hooks below.
-      if (cfg.sourcePatch) {
-        if (cfg.renderSideScale)
-          LOG("dllmain: WARNING — both SourcePatch and render-side Scaling are "
-              "on; the UI will be scaled twice. Disable one.");
-        sourcepatch::ApplyGui2ScaleDefault(cfg.scale);
-      }
+      logx::Init(cfg.logEnabled, (dir + "\\d3d9_uiscale.log").c_str());
+      LOG("=====================================================");
+      LOG("dllmain: attach (hybrid signature+data-flow build). dir=%s "
+          "enabled=%d apply=%d override=%.3f reference=%dx%d",
+          dir.c_str(), cfg.enabled, cfg.apply, cfg.scaleOverride,
+          cfg.referenceWidth, cfg.referenceHeight);
 
       if (!proxy::Init()) {
-        LOG("dllmain: proxy init failed — the game may not render. Aborting hook setup.");
-        return TRUE;  // stay loaded so exports still forward where possible.
+        LOG("dllmain: proxy init failed — game may not render. Aborting.");
+        return TRUE;  // stay loaded so exports still resolve as best-effort
       }
 
-      if (MH_Initialize() != MH_OK) {
-        LOG("dllmain: MH_Initialize failed — device hooks will not install.");
-      } else {
-        LOG("dllmain: MinHook initialised. Awaiting Direct3DCreate9.");
-        // Install the UI-scale hook now (before the game builds its GUI2
-        // desktop) so the whole UI lays out at the configured scale.
-        sourcepatch::InstallUiScaleHook(cfg.uiScale);
-      }
+      if (!patch::Init())
+        LOG("dllmain: MinHook init failed — no hooks will install; the mod "
+            "stays inert");
+
+      selector::Init(dir.c_str());
+      gate::SetCallbacks(&selector::OnStable, &selector::OnTick,
+                         &selector::OnReset);
+      LOG("dllmain: wired. Timing hooks armed at attach; discovery waits for "
+          "a stable backbuffer (startup-trap defense); scaling waits for "
+          "hook + validated mapping.");
       break;
     }
-
     case DLL_PROCESS_DETACH: {
-      LOG("dllmain: detach.");
-      inputremap::Remove();
-      MH_DisableHook(MH_ALL_HOOKS);
-      MH_Uninitialize();
-      logger::Shutdown();
-      proxy::Shutdown();
+      LOG("dllmain: detach — restoring everything");
+      selector::OnDetach();
+      patch::Shutdown();  // RestoreAll + UnhookAll
+      logx::Shutdown();
       break;
     }
   }
