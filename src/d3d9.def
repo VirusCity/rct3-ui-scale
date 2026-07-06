@@ -1,14 +1,13 @@
-; Module-definition file for the d3d9.dll proxy.
+; Module-definition file for the d3d9.dll proxy (src-v2).
 ;
 ; Export names AND ordinals were taken directly from this machine's 32-bit
-; system DLL (C:\Windows\SysWOW64\d3d9.dll) via `dumpbin /exports`. They are NOT
-; guessed. Matching ordinals means the proxy also satisfies by-ordinal imports.
+; system DLL (C:\Windows\SysWOW64\d3d9.dll) via `dumpbin /exports` during v1
+; development. They are NOT guessed. Matching ordinals means the proxy also
+; satisfies by-ordinal imports.
 ;
 ; Most exports are transparent pass-throughs (naked jmp stubs to the real DLL).
-; Direct3DCreate9 / Direct3DCreate9Ex are WRAPPED so we can hook the device.
-;
-; If this DLL is ever rebuilt against a different Windows/d3d9 version whose
-; ordinals differ, re-dump and update this file — do not assume.
+; Direct3DCreate9 / Direct3DCreate9Ex are WRAPPED so the backbuffer gate can
+; observe device creation.
 
 EXPORTS
     D3DPERF_BeginEvent                          @27
