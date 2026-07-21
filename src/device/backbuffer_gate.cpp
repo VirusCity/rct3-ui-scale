@@ -4,6 +4,7 @@
 #include "../core/log.h"
 #include "../core/patch.h"
 #include "../core/state.h"
+#include "../hooks/superwide_fix.h"
 #include "../window/borderless.h"
 
 namespace gate {
@@ -93,6 +94,10 @@ HRESULT __stdcall PresentDetour(IDirect3DDevice9* dev, const RECT* src,
   TrackBackbuffer(dev);
   borderless::Tick();  // re-assert borderless window if the game restored chrome
   if (g_stable && g_onTick) g_onTick(dev);
+  // Fill the pillarbox margin on loading frames. Deliberately NOT gated on
+  // g_stable: loading screens run before the gate opens, and this only paints
+  // when the loader hook actually clamped this frame.
+  superwide::OnPresent(dev);
   return g_origPresent(dev, src, dst, wnd, dirty);
 }
 

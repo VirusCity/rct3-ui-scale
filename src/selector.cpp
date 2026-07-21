@@ -8,6 +8,7 @@
 #include "core/patch.h"
 #include "core/state.h"
 #include "discovery/passive_discovery.h"
+#include "hooks/superwide_fix.h"
 #include "hooks/timing_hook.h"
 
 namespace selector {
@@ -98,6 +99,12 @@ void Init(const char* dllDir) {
       }
     }
   }
+
+  // Independent of the canvas creator hooks: null-guard the UI quad allocator
+  // so a rejected off-screen quad can never be written to address 0 (the
+  // >2.78-aspect / 32:9 launch crash), plus the optional loading-screen
+  // pillarbox. Self-gates on [Borderless] SuperUltrawideFix.
+  superwide::Install();
 
   if (timing::InstalledCount() > 0 && cfg.apply) {
     g_armedThisSession = true;

@@ -30,6 +30,7 @@ add_library(d3d9 SHARED
   src/discovery/passive_discovery.cpp
   src/sig/sigscan.cpp
   src/hooks/timing_hook.cpp
+  src/hooks/superwide_fix.cpp
   src/window/borderless.cpp
   src/apply/disable.cpp
   src/cache/strategy_cache.cpp

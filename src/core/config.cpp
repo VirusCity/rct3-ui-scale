@@ -44,6 +44,28 @@ bool LoadConfig(const char* iniPath) {
       GetPrivateProfileIntA("Borderless", "Height", 0, iniPath);
   if (c.borderlessWidth < 0) c.borderlessWidth = 0;
   if (c.borderlessHeight < 0) c.borderlessHeight = 0;
+  c.superUltrawideFix =
+      GetPrivateProfileIntA("Borderless", "SuperUltrawideFix", 1, iniPath) != 0;
+  c.superUltrawideLoaderAspect =
+      GetIniFloat(iniPath, "Borderless", "SuperUltrawideLoaderAspect", 1.7778f);
+  // Below the authored 5:4 the loader's min-fit flips to height-bound and the
+  // layout changes character; above ~3.5 there is nothing left to pillarbox.
+  if (c.superUltrawideLoaderAspect < 1.25f ||
+      c.superUltrawideLoaderAspect > 3.5f)
+    c.superUltrawideLoaderAspect = 1.7778f;
+  {
+    // RRGGBB hex; tolerate a leading '#' or '0x'. Anything unparseable falls
+    // back to the loading screen's own blue rather than a surprise colour.
+    char buf[32] = {};
+    GetPrivateProfileStringA("Borderless", "SuperUltrawideFillColor", "56ABE5",
+                             buf, sizeof(buf), iniPath);
+    const char* p = buf;
+    if (*p == '#') ++p;
+    char* end = nullptr;
+    const unsigned long v = strtoul(p, &end, 16);
+    c.superUltrawideFill =
+        (end && end != p) ? static_cast<unsigned>(v & 0x00FFFFFFu) : 0x56ABE5u;
+  }
 
   c.stableFrames = GetPrivateProfileIntA("Gate", "StableFrames", 30, iniPath);
   c.stableFramesPlaceholder =
@@ -68,6 +90,8 @@ bool LoadConfig(const char* iniPath) {
                            sizeof(c.sigGuardB), iniPath);
   GetPrivateProfileStringA("Signatures", "PrologueB", "", c.sigPrologueB,
                            sizeof(c.sigPrologueB), iniPath);
+  GetPrivateProfileStringA("Signatures", "SuperUltrawide", "", c.sigSuperWide,
+                           sizeof(c.sigSuperWide), iniPath);
 
   // Sanity clamps — a nonsense reference dimension would corrupt every scale
   // computation downstream.

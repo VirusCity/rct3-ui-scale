@@ -118,10 +118,57 @@ The shipped ini is deliberately minimal — three user-facing settings:
 
 Advanced keys (undocumented in the shipped file, still honored if re-added,
 defaults fit every known edition): `[Scaling] Apply/ReferenceWidth/
-ReferenceHeight`, `[Borderless] Width/Height`, `[Gate] StableFrames/
-StableFramesPlaceholder`, `[Discovery] StableFrames/TimeoutFrames/
-SlotsPerTick/MaxRectOffset/MinCanvasXref`, `[Signatures] GuardA/PrologueA/
-GuardB/PrologueB`.
+ReferenceHeight`, `[Borderless] Width/Height`, `[Borderless] SuperUltrawideFix`,
+`[Borderless] SuperUltrawideFillColor/SuperUltrawideLoaderAspect`,
+`[Gate] StableFrames/StableFramesPlaceholder`, `[Discovery] StableFrames/
+TimeoutFrames/SlotsPerTick/MaxRectOffset/MinCanvasXref`, `[Signatures] GuardA/
+PrologueA/GuardB/PrologueB/SuperUltrawide`.
+
+`[Borderless] SuperUltrawideFix` (default `1`, ON) fixes an engine crash on
+displays wider than ~2.78:1 (≈25:9; e.g. 32:9). Past that aspect the
+fixed-reference loading screen pushes its progress-bar geometry off-screen; the
+engine's quad clipper rejects it and the shared UI quad allocator returns NULL —
+which 30+ UI builders (the loading bar among them) write to **without a null
+check**, crashing on launch. The mod hooks the allocator (`hooks/superwide_fix.*`)
+and, on a NULL return, hands back a throwaway scratch buffer: the rejected quad
+was never batched, so nothing renders and no caller ever dereferences NULL. It's
+the root-cause fix — one hook covers every screen, needs no canvas discovery or
+cache (works on the very first launch), and never touches gameplay layout. The
+allocator is located per edition by its pointer-return epilogue (built-ins for
+Complete + Gold; override via `[Signatures] SuperUltrawide`); on an unrecognised
+build it's a safe no-op. Set `SuperUltrawideFix=0` to disable.
+
+On top of that floor the same feature **pillarboxes the loading screen** so the
+progress bar stays visible (without it the guard leaves you on a blank screen
+with no loading feedback). The loading screen is laid out against a fixed
+1280×1024 design space fitted with `min(1280/W, 1024/H)`, so its *vertical*
+positions scale with canvas **width**. We therefore clamp the canvas it lays out
+against to at most `[Borderless] SuperUltrawideLoaderAspect` (hidden key, default
+**1.7778 = 16:9**). 16:9 rather than the authored 5:4 because the clamp engages on
+anything *wider* than the limit — 5:4 would pillarbox ordinary 16:9 monitors that
+never had the bug. 16:9 is also exactly what the engine already does at a stock
+1080p (width-bound, so only design-Y ≤ 720 is ever shown), i.e. the presentation
+every 16:9 player has always seen, so nothing is lost by holding wider displays to
+it. The clamp is applied
+only for the duration of the loader call and restored after, so gameplay and UI
+scale never see it. The loader is located by its own canvas-rect divide, which
+opens with `MOV EAX,[canvasGlobal]` — the canvas pointer is read straight out of
+the matched code, so this needs no canvas discovery or cache and works on a
+first, cache-less launch. It is strictly cosmetic and only attempted once the
+guard is armed: if no loading-screen signature matches, the guard alone still
+prevents the crash and the bar is simply off-screen. Note the loading screen's
+element coordinates are absolute from `x=0` (they never add `canvas.left`), so
+the pillarbox is left-anchored — the box sits against the left edge, not centred.
+
+Because the *previous* screen keeps rendering behind the loading screen (normally
+hidden by the loading screen's canvas-sized background, which the 5:4 clamp
+shrinks), the margin beside the box would otherwise show it. So on each
+pillarboxed frame the Present hook fills that margin with a single rect
+`IDirect3DDevice9::Clear` — after the frame is drawn, painting over everything
+that leaked in. The colour is `[Borderless] SuperUltrawideFillColor` (hidden key,
+`RRGGBB` hex, default `56ABE5` — the loading screen's own light blue; it also
+uses `2A79AF` for the darker upper band, so set that instead if you prefer the
+margin to match the top of the box).
 
 ## Build
 
