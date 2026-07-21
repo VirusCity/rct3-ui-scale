@@ -51,6 +51,12 @@ Details: [src/README.md](src/README.md).
 
 ## Troubleshooting
 
+- **Game fails to launch, then launches fine the second time with the mod
+  missing?** Windows Defender quarantined `d3d9.dll`. It's a false positive —
+  the mod is fully open-source if you want to vet it, and it never alters
+  system or game files. The detection comes from how the mod intercepts the
+  game to scale the UI. Add the game folder to your Defender exclusions, then
+  restore `d3d9.dll` from Protection History or copy it back in.
 - **UI didn't scale?** Set `Logging=1` under `[Debug]`, relaunch, load into a
   park, quit, and open an issue with the `d3d9_uiscale.log` from the game
   folder. The log records exactly what was searched and why.
