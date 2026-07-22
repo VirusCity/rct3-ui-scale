@@ -1,4 +1,4 @@
-# RCT3 UI Scale
+<img width="1300" height="372" alt="banner2" src="https://github.com/user-attachments/assets/ca4fe119-267f-498c-b08b-d09d6dfca2cd" />
 
 Fixes the tiny UI in *RollerCoaster Tycoon 3* on modern high-resolution
 displays. Drop two files next to the game and the interface renders at a
@@ -6,8 +6,7 @@ usable size — **2× at 4K, ~1.33× at 1440p, native at 1080p** — with mouse
 input staying perfectly aligned. Optional borderless-windowed mode lets the
 game render at your monitor's full resolution, above its built-in 1080p cap.
 
-No per-version hacks: the mod discovers the game's UI canvas at runtime, so
-one DLL works across editions. Confirmed scaling **on first launch** on:
+Confirmed scaling on:
 
 | Edition | Executable |
 | --- | --- |
@@ -15,7 +14,7 @@ one DLL works across editions. Confirmed scaling **on first launch** on:
 | Platinum / Gold | `RCT3plus.exe` |
 | Original 2004 demo | `RCT3.exe` |
 
-Other builds (retail, GOG, community-patched, widescreen-fixed) are expected
+Other builds (retail, GOG, etc.) are expected
 to work the same way — the discovery is version-agnostic by design. If one
 doesn't, see Troubleshooting.
 
@@ -37,18 +36,6 @@ To uninstall, delete the two files (plus `d3d9_uiscale.cache` if present).
 | `[Features] Borderless` | `1` | Borderless window at your monitor's native resolution (lets the game render above its 1080p cap). |
 | `[Debug] Cache / Logging / Verbose` | `1 / 0 / 0` | Diagnostics — leave alone unless advised. |
 
-## How it works (short version)
-
-The game lays its UI out against a canvas whose size the engine divides into
-the screen resolution. The mod finds that canvas **at runtime, by data flow**
-— no hardcoded addresses, no per-version signatures for data — hooks the
-function that creates it, and shrinks it *before the UI lays out*, so the
-engine's own math magnifies rendering and mouse hit-testing together. Every
-patch is validated against the live backbuffer, fully reversible, and cached
-per-executable (a game update just triggers a fresh self-calibration).
-
-Details: [src/README.md](src/README.md).
-
 ## Troubleshooting
 
 - **Game fails to launch, then launches fine the second time with the mod
@@ -63,6 +50,18 @@ Details: [src/README.md](src/README.md).
 - **Weird state after a crash or game update?** Delete `d3d9_uiscale.cache`
   next to the exe — the mod recalibrates on the next launch. (It also detects
   both situations itself; this is just the manual override.)
+
+## How it works (short version)
+
+The game lays its UI out against a canvas whose size the engine divides into
+the screen resolution. The mod finds that canvas **at runtime, by data flow**
+— no hardcoded addresses, no per-version signatures for data — hooks the
+function that creates it, and shrinks it *before the UI lays out*, so the
+engine's own math magnifies rendering and mouse hit-testing together. Every
+patch is validated against the live backbuffer, fully reversible, and cached
+per-executable (a game update just triggers a fresh self-calibration).
+
+Details: [src/README.md](src/README.md).
 
 ## Building from source
 
